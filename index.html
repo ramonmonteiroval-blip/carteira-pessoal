@@ -6,7 +6,6 @@
 <meta name="theme-color" content="#0B3C5D">
 <title>Carteira Pessoal</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0B3C5D">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Carteira">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -42,6 +41,7 @@ header{display:flex;justify-content:space-between;align-items:center;gap:12px;fl
 .brand svg{width:34px;height:34px}
 .btns{display:flex;gap:8px;flex-wrap:wrap}
 button,.btn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 12px;border-radius:6px;cursor:pointer;min-height:40px}
+button:disabled{opacity:.6;cursor:default}
 button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
 button.ghost{border-color:transparent;background:transparent;color:var(--muted);min-height:auto;padding:4px 6px}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -55,6 +55,7 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 label{display:grid;gap:4px;font-size:12px;color:var(--muted);min-width:0}
 input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+input[type="file"]{font-size:14px;padding:8px}
 .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg button{flex:1;border:0;border-radius:0;min-height:40px}
 .seg button[aria-pressed="true"].in{background:var(--gain);color:#fff}
@@ -71,7 +72,11 @@ input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(-
 .tag{display:inline-block;font-size:11px;padding:1px 6px;border:1px solid var(--line);border-radius:3px;color:var(--muted);margin-left:6px}
 .tag.ok{color:var(--gain);border-color:var(--gain)}
 .tag.late{color:var(--loss);border-color:var(--loss)}
-.act{display:flex;gap:4px;justify-content:flex-end;margin-top:2px}
+.act{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;margin-top:2px}
+.anx{display:flex;flex-wrap:wrap;gap:2px 8px;min-width:0}
+.anx:empty{display:none}
+.anx-item{display:inline-flex;align-items:center;max-width:100%;min-width:0}
+.anx-item button{text-align:left;overflow-wrap:anywhere;font-size:13px}
 .empty{text-align:center;color:var(--muted);padding:24px 8px}
 .empty strong{display:block;color:var(--ink);margin-bottom:6px}
 .hint{font-size:12px;color:var(--muted)}
@@ -88,9 +93,7 @@ input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(-
       <span>Carteira Pessoal</span>
     </div>
     <div class="btns">
-      <button id="btnExport" title="Salvar uma cópia dos dados">Exportar</button>
-      <button id="btnImport" title="Carregar uma cópia salva">Importar</button>
-      <input id="fileImport" type="file" accept="application/json,.json" hidden>
+      <button id="btnAtualizar" title="Buscar a versão mais recente do app (seus dados são mantidos)">Atualizar</button>
     </div>
   </header>
 
@@ -121,6 +124,9 @@ input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(-
           <option value="realizado">Pago / recebido</option>
         </select>
       </label>
+      <label style="grid-column:1/-1">Anexos (foto ou PDF, opcional)
+        <input id="anexoForm" type="file" accept="image/*,application/pdf" multiple>
+      </label>
       <div class="form-actions">
         <button type="reset" id="btnReset">Limpar</button>
         <button type="submit" class="primary">Salvar lançamento</button>
@@ -139,14 +145,15 @@ input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(-
     <div id="list"></div>
   </section>
 
-  <p class="hint">Os dados ficam salvos neste aparelho e funcionam sem internet. Use Exportar para guardar uma cópia.</p>
+  <p class="hint">Os dados e os anexos ficam salvos neste aparelho e funcionam sem internet. Use Atualizar para receber a versão mais nova do app.</p>
 </div>
+<input id="fileAnexo" type="file" accept="image/*,application/pdf" multiple hidden>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 (function () {
   var KEY = "carteira-pessoal-v1";
-  var state = { tipo: "saida", filtro: "Todas", items: [] };
+  var state = { tipo: "saida", filtro: "Todas", items: [], anexarId: null };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -186,7 +193,90 @@ input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(-
   }
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state.items)); return true; }
-    catch (e) { toast("Não consegui salvar neste aparelho. Exporte uma cópia."); return false; }
+    catch (e) { toast("Não consegui salvar neste aparelho."); return false; }
+  }
+
+  /* ---------- anexos (guardados no IndexedDB do aparelho) ---------- */
+  var DBH = null;
+  function dbOpen() {
+    if (DBH) return Promise.resolve(DBH);
+    return new Promise(function (res, rej) {
+      var r = indexedDB.open("carteira-pessoal-anexos", 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore("anexos", { keyPath: "key" }); };
+      r.onsuccess = function () { DBH = r.result; res(DBH); };
+      r.onerror = function () { rej(r.error); };
+    });
+  }
+  function anexoAdd(lid, file) {
+    return dbOpen().then(function (db) {
+      return new Promise(function (res, rej) {
+        var key = lid + "|" + Date.now() + "|" + Math.random().toString(36).slice(2, 6);
+        var tx = db.transaction("anexos", "readwrite");
+        tx.objectStore("anexos").put({ key: key, lid: lid, nome: file.name || "arquivo", tipo: file.type || "", blob: file });
+        tx.oncomplete = function () { res(); };
+        tx.onerror = function () { rej(tx.error); };
+      });
+    });
+  }
+  function anexoList(lid) {
+    return dbOpen().then(function (db) {
+      return new Promise(function (res, rej) {
+        var out = [];
+        var req = db.transaction("anexos", "readonly").objectStore("anexos").openCursor();
+        req.onsuccess = function () {
+          var c = req.result;
+          if (c) { if (c.value.lid === lid) out.push(c.value); c.continue(); }
+          else res(out);
+        };
+        req.onerror = function () { rej(req.error); };
+      });
+    });
+  }
+  function anexoGet(key) {
+    return dbOpen().then(function (db) {
+      return new Promise(function (res, rej) {
+        var r = db.transaction("anexos", "readonly").objectStore("anexos").get(key);
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = function () { rej(r.error); };
+      });
+    });
+  }
+  function anexoDel(keys) {
+    return dbOpen().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction("anexos", "readwrite");
+        var st = tx.objectStore("anexos");
+        keys.forEach(function (k) { st.delete(k); });
+        tx.oncomplete = function () { res(); };
+        tx.onerror = function () { rej(tx.error); };
+      });
+    });
+  }
+  function anexoRemoveAll(lid) {
+    return anexoList(lid).then(function (list) {
+      return anexoDel(list.map(function (a) { return a.key; }));
+    });
+  }
+  function abrirAnexo(key) {
+    anexoGet(key).then(function (a) {
+      if (!a || !a.blob) { toast("Anexo não encontrado."); return; }
+      var url = URL.createObjectURL(a.blob);
+      var l = document.createElement("a");
+      l.href = url; l.target = "_blank"; l.rel = "noopener";
+      document.body.appendChild(l); l.click();
+      setTimeout(function () { URL.revokeObjectURL(url); l.remove(); }, 60000);
+    }).catch(function () { toast("Não consegui abrir o anexo."); });
+  }
+  function refreshAnexos() {
+    var els = document.querySelectorAll("[data-anx]");
+    Array.prototype.forEach.call(els, function (el) {
+      anexoList(el.getAttribute("data-anx")).then(function (list) {
+        el.innerHTML = list.map(function (a, i) {
+          return '<span class="anx-item"><button class="ghost" data-abrir="' + esc(a.key) + '">Anexo ' + (i + 1) + ": " + esc(a.nome) +
+            '</button><button class="ghost" data-adel="' + esc(a.key) + '" title="Remover anexo" aria-label="Remover anexo">×</button></span>';
+        }).join("");
+      }).catch(function () {});
+    });
   }
 
   function render() {
@@ -232,6 +322,8 @@ input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(-
       var tag = done ? '<span class="tag ok">' + (r.tipo === "entrada" ? "recebido" : "pago") + "</span>" : '<span class="tag">previsto</span>';
       return rowHtml(r, tag);
     }).join("") : '<div class="empty"><strong>Nenhum lançamento ainda.</strong>Use o formulário acima para começar.</div>';
+
+    refreshAnexos();
   }
 
   function card(label, value, cls) {
@@ -243,7 +335,9 @@ input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(-
     return '<div class="row">' +
       '<div><div class="d">' + esc(r.descricao) + "</div>" +
       '<div class="m">' + esc(fmtDate(r.data)) + " · " + esc(r.area || "") + (r.categoria ? " · " + esc(r.categoria) : "") + " " + tag + "</div>" +
+      '<div class="anx" data-anx="' + esc(r.id) + '"></div>' +
       '<div class="act">' +
+        '<button class="ghost" data-anexar="' + esc(r.id) + '">Anexar</button>' +
         '<button class="ghost" data-toggle="' + esc(r.id) + '">' + (r.situacao === "realizado" ? "Desfazer baixa" : "Dar baixa") + "</button>" +
         '<button class="ghost" data-del="' + esc(r.id) + '">Excluir</button>' +
       "</div></div>" +
@@ -265,6 +359,7 @@ input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(-
     if (!(valor > 0)) { toast("Informe um valor maior que zero."); $("valor").focus(); return; }
     var desc = $("descricao").value.trim();
     if (!desc) { toast("Informe a descrição."); return; }
+    var anexos = Array.prototype.slice.call($("anexoForm").files || []);
     var item = {
       id: String(Date.now()) + Math.random().toString(36).slice(2, 7),
       tipo: state.tipo,
@@ -282,60 +377,77 @@ input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(-
     setTipo("saida");
     render();
     toast("Lançamento salvo.");
+    if (anexos.length) {
+      Promise.all(anexos.map(function (f) { return anexoAdd(item.id, f); }))
+        .then(function () { refreshAnexos(); })
+        .catch(function () { toast("Não consegui guardar algum anexo."); });
+    }
   });
 
   $("btnReset").addEventListener("click", function () {
     setTimeout(function () { $("data").value = todayIso(); setTipo("saida"); }, 0);
   });
 
+  $("fileAnexo").addEventListener("change", function (e) {
+    var id = state.anexarId;
+    var files = Array.prototype.slice.call(e.target.files || []);
+    e.target.value = "";
+    if (!id || !files.length) return;
+    Promise.all(files.map(function (f) { return anexoAdd(id, f); }))
+      .then(function () { toast("Anexo guardado."); refreshAnexos(); })
+      .catch(function () { toast("Não consegui guardar o anexo."); });
+  });
+
   document.addEventListener("click", function (e) {
     var t = e.target;
-    if (t.getAttribute && t.getAttribute("data-f")) {
+    if (!t.getAttribute) return;
+    if (t.getAttribute("data-f")) {
       state.filtro = t.getAttribute("data-f"); render(); return;
     }
-    if (t.getAttribute && t.getAttribute("data-toggle")) {
+    if (t.getAttribute("data-anexar")) {
+      state.anexarId = t.getAttribute("data-anexar");
+      $("fileAnexo").click(); return;
+    }
+    if (t.getAttribute("data-abrir")) { abrirAnexo(t.getAttribute("data-abrir")); return; }
+    if (t.getAttribute("data-adel")) {
+      var ak = t.getAttribute("data-adel");
+      if (window.confirm("Remover este anexo?")) {
+        anexoDel([ak]).then(function () { toast("Anexo removido."); refreshAnexos(); })
+          .catch(function () { toast("Não consegui remover o anexo."); });
+      }
+      return;
+    }
+    if (t.getAttribute("data-toggle")) {
       var id = t.getAttribute("data-toggle");
       state.items.forEach(function (r) {
         if (r.id === id) r.situacao = r.situacao === "realizado" ? "previsto" : "realizado";
       });
       save(); render(); return;
     }
-    if (t.getAttribute && t.getAttribute("data-del")) {
+    if (t.getAttribute("data-del")) {
       var did = t.getAttribute("data-del");
       var found = state.items.filter(function (r) { return r.id === did; })[0];
-      if (found && window.confirm("Excluir “" + found.descricao + "”?")) {
+      if (found && window.confirm("Excluir “" + found.descricao + "” e seus anexos?")) {
         state.items = state.items.filter(function (r) { return r.id !== did; });
-        save(); render(); toast("Excluído.");
+        save(); anexoRemoveAll(did).catch(function () {});
+        render(); toast("Excluído.");
       }
     }
   });
 
-  $("btnExport").addEventListener("click", function () {
-    var blob = new Blob([JSON.stringify({ app: "carteira-pessoal", versao: 1, exportado: new Date().toISOString(), lancamentos: state.items }, null, 2)], { type: "application/json" });
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "carteira-pessoal-" + todayIso() + ".json";
-    document.body.appendChild(a); a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  });
-
-  $("btnImport").addEventListener("click", function () { $("fileImport").click(); });
-  $("fileImport").addEventListener("change", function (e) {
-    var f = e.target.files && e.target.files[0];
-    if (!f) return;
-    var reader = new FileReader();
-    reader.onload = function () {
-      try {
-        var data = JSON.parse(reader.result);
-        var list = Array.isArray(data) ? data : data.lancamentos;
-        if (!Array.isArray(list)) throw new Error("formato");
-        if (!window.confirm("Substituir os lançamentos deste aparelho por " + list.length + " do arquivo?")) return;
-        state.items = list;
-        save(); render(); toast("Importado: " + list.length + " lançamento(s).");
-      } catch (err) { toast("Arquivo inválido."); }
-      e.target.value = "";
-    };
-    reader.readAsText(f);
+  $("btnAtualizar").addEventListener("click", function () {
+    var b = this;
+    b.disabled = true; b.textContent = "Atualizando…";
+    var jobs = [];
+    if ("caches" in window) {
+      jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+    }
+    if ("serviceWorker" in navigator) {
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+    }
+    Promise.all(jobs).catch(function () {}).then(function () {
+      location.href = location.pathname + "?v=" + Date.now();
+    });
   });
 
   load();
