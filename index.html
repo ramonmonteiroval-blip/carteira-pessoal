@@ -745,8 +745,6 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     $("form").reset();
     $("data").value = todayIso();
     setTipo("saida");
-    state.mes = base.data.slice(0, 7);
-    state.todosMeses = false;
     render();
     toast(n > 1 ? n + " lançamentos criados." : "Lançamento salvo.");
     if (anexos.length) {
