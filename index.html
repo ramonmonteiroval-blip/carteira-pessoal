@@ -94,6 +94,8 @@ input[type="file"]{font-size:14px;padding:8px}
       <span>Carteira Pessoal</span>
     </div>
     <div class="btns">
+      <button id="btnCopia" title="Salvar uma cópia dos lançamentos (Drive, e-mail, WhatsApp…)">Fazer cópia</button>
+      <button id="btnRestaurar" title="Recuperar os lançamentos de uma cópia salva">Restaurar</button>
       <button id="btnAtualizar" title="Buscar a versão mais recente do app (seus dados são mantidos)">Atualizar</button>
     </div>
   </header>
@@ -146,9 +148,10 @@ input[type="file"]{font-size:14px;padding:8px}
     <div id="list"></div>
   </section>
 
-  <p class="hint">Os dados e os anexos ficam salvos neste aparelho e funcionam sem internet. Use Atualizar para receber a versão mais nova do app.</p>
+  <p class="hint">Os dados e os anexos ficam salvos neste aparelho e funcionam sem internet. Toque em Fazer cópia de vez em quando e guarde o arquivo no Google Drive. A cópia guarda os lançamentos; os anexos (fotos e PDFs) não entram nela.</p>
 </div>
 <input id="fileAnexo" type="file" accept="image/*,application/pdf" multiple hidden>
+<input id="fileRestaurar" type="file" accept="application/json,.json" hidden>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -474,6 +477,48 @@ input[type="file"]{font-size:14px;padding:8px}
         render(); toast("Excluído.");
       }
     }
+  });
+
+  /* ---------- cópia de segurança e restauração ---------- */
+  function baixarArquivo(file) {
+    var url = URL.createObjectURL(file);
+    var a = document.createElement("a");
+    a.href = url; a.download = file.name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 2000);
+    toast("Cópia baixada.");
+  }
+  $("btnCopia").addEventListener("click", function () {
+    var conteudo = JSON.stringify({ app: "carteira-pessoal", versao: 1, exportado: new Date().toISOString(), lancamentos: state.items }, null, 2);
+    var file = new File([conteudo], "carteira-pessoal-" + todayIso() + ".json", { type: "application/json" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: "Cópia da Carteira Pessoal" })
+        .then(function () { toast("Cópia enviada."); })
+        .catch(function (err) {
+          if (err && err.name === "AbortError") return;
+          baixarArquivo(file);
+        });
+      return;
+    }
+    baixarArquivo(file);
+  });
+  $("btnRestaurar").addEventListener("click", function () { $("fileRestaurar").click(); });
+  $("fileRestaurar").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        var list = Array.isArray(data) ? data : data.lancamentos;
+        if (!Array.isArray(list)) throw new Error("formato");
+        if (!window.confirm("Substituir os lançamentos deste aparelho pelos " + list.length + " da cópia?")) return;
+        state.items = list;
+        save(); render(); toast("Restaurado: " + list.length + " lançamento(s).");
+      } catch (err) { toast("Arquivo inválido."); }
+    };
+    reader.readAsText(f);
   });
 
   $("btnAtualizar").addEventListener("click", function () {
