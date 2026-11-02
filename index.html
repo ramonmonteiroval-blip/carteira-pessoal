@@ -338,11 +338,50 @@ input[type="file"]{font-size:14px;padding:8px}
       '<div class="m">' + esc(fmtDate(r.data)) + " · " + esc(r.area || "") + (r.categoria ? " · " + esc(r.categoria) : "") + " " + tag + "</div>" +
       '<div class="anx" data-anx="' + esc(r.id) + '"></div>' +
       '<div class="act">' +
+        '<button class="ghost" data-agendar="' + esc(r.id) + '" title="Criar lembrete na agenda">Agendar</button>' +
         '<button class="ghost" data-anexar="' + esc(r.id) + '">Anexar</button>' +
         '<button class="ghost" data-toggle="' + esc(r.id) + '">' + (r.situacao === "realizado" ? "Desfazer baixa" : "Dar baixa") + "</button>" +
         '<button class="danger" data-del="' + esc(r.id) + '" title="Apagar este lançamento">Excluir</button>' +
       "</div></div>" +
       '<div class="val ' + cls + '">' + sign + brl(r.valor) + "</div></div>";
+  }
+
+  /* ---------- agenda: gera um .ics com o vencimento e aviso um dia antes às 9h ---------- */
+  function icsEsc(s) {
+    return String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  }
+  function agendar(id) {
+    var r = state.items.filter(function (x) { return x.id === id; })[0];
+    if (!r || !r.data) { toast("Este lançamento não tem data."); return; }
+    var ymd = r.data.replace(/-/g, "");
+    var next = new Date(r.data + "T12:00:00");
+    next.setDate(next.getDate() + 1);
+    var p = function (n) { return (n < 10 ? "0" : "") + n; };
+    var ymdNext = next.getFullYear() + p(next.getMonth() + 1) + p(next.getDate());
+    var stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+    var tipoTxt = r.tipo === "entrada" ? "Receber" : "Pagar";
+    var titulo = tipoTxt + ": " + r.descricao + " (" + brl(r.valor) + ")";
+    var desc = "Área: " + (r.area || "-") + (r.categoria ? "\nCategoria: " + r.categoria : "") + "\nValor: " + brl(r.valor) + "\nLançado no app Carteira Pessoal";
+    var ics = [
+      "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Carteira Pessoal//PT", "CALSCALE:GREGORIAN",
+      "BEGIN:VEVENT",
+      "UID:" + r.id + "@carteira-pessoal",
+      "DTSTAMP:" + stamp,
+      "DTSTART;VALUE=DATE:" + ymd,
+      "DTEND;VALUE=DATE:" + ymdNext,
+      "SUMMARY:" + icsEsc(titulo),
+      "DESCRIPTION:" + icsEsc(desc),
+      "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsEsc(titulo), "TRIGGER:-PT15H", "END:VALARM",
+      "END:VEVENT", "END:VCALENDAR"
+    ].join("\r\n") + "\r\n";
+    var blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "vencimento-" + r.data + "-" + r.id + ".ics";
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 2000);
+    toast("Abra o arquivo baixado para adicionar à agenda.");
   }
 
   function setTipo(t) {
@@ -405,6 +444,7 @@ input[type="file"]{font-size:14px;padding:8px}
     if (t.getAttribute("data-f")) {
       state.filtro = t.getAttribute("data-f"); render(); return;
     }
+    if (t.getAttribute("data-agendar")) { agendar(t.getAttribute("data-agendar")); return; }
     if (t.getAttribute("data-anexar")) {
       state.anexarId = t.getAttribute("data-anexar");
       $("fileAnexo").click(); return;
