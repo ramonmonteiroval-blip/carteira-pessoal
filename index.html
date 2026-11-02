@@ -90,6 +90,14 @@ input[type="file"]{font-size:14px;padding:8px}
 .dlg-box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:8px;width:min(380px,100%)}
 .dlg-box p{margin:0 0 4px;font-weight:600}
 .dlg-box button{width:100%}
+details.sec{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-position:inside}
+.aj-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px}
+.aj-grid input[type="range"]{padding:0;accent-color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{display:inline-flex;align-items:center;font-size:13px;min-height:36px;border-radius:999px;padding:4px 12px}
+.chips button[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.sw{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:6px;border:1px solid var(--line)}
 .empty{text-align:center;color:var(--muted);padding:24px 8px}
 .empty strong{display:block;color:var(--ink);margin-bottom:6px}
 .hint{font-size:12px;color:var(--muted)}
@@ -185,6 +193,35 @@ input[type="file"]{font-size:14px;padding:8px}
     <div class="filters" id="filters"></div>
     <div id="list"></div>
   </section>
+
+  <details class="sec" id="ajustes">
+    <summary>Aparência e texto</summary>
+    <div class="aj-grid">
+      <label>Tema
+        <select id="ajTema">
+          <option value="sistema">Seguir o celular (padrão)</option>
+          <option value="claro">Claro</option>
+          <option value="escuro">Escuro</option>
+        </select>
+      </label>
+      <label>Fonte
+        <select id="ajFonte">
+          <option value="sistema">Padrão do aparelho</option>
+          <option value="arial">Arial</option>
+          <option value="verdana">Verdana</option>
+          <option value="georgia">Georgia (com serifa)</option>
+          <option value="times">Times New Roman</option>
+        </select>
+      </label>
+      <label>Tamanho do texto: <span id="ajTamanhoV">100%</span>
+        <input id="ajTamanho" type="range" min="85" max="150" step="5" value="100">
+      </label>
+      <div style="display:grid;gap:6px">
+        <span style="font-size:12px;color:var(--muted)">Cor principal</span>
+        <div class="chips" id="ajPaletas"></div>
+      </div>
+    </div>
+  </details>
 
   <p class="hint">Os dados e os anexos ficam salvos neste aparelho e funcionam sem internet. Toque em Fazer cópia de vez em quando e guarde o arquivo no Google Drive. A cópia guarda os lançamentos; os anexos (fotos e PDFs) não entram nela.</p>
 </div>
@@ -834,6 +871,74 @@ input[type="file"]{font-size:14px;padding:8px}
       location.href = location.pathname + "?v=" + Date.now();
     });
   });
+
+  /* ---------- aparência: tema, cor principal, fonte e tamanho do texto ---------- */
+  var PREFS_KEY = "carteira-pessoal-prefs";
+  var PALETAS = {
+    azul:    { nome: "Azul",    claro: "#0B3C5D", escuro: "#1B5A86" },
+    verde:   { nome: "Verde",   claro: "#0B5D3B", escuro: "#1E8A5A" },
+    roxo:    { nome: "Roxo",    claro: "#4B2A7B", escuro: "#6B45A8" },
+    vinho:   { nome: "Vinho",   claro: "#7A1F3D", escuro: "#A23558" },
+    grafite: { nome: "Grafite", claro: "#2E3A46", escuro: "#5A6B7D" }
+  };
+  var FONTES = {
+    sistema: 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif',
+    arial:   'Arial,Helvetica,sans-serif',
+    verdana: 'Verdana,Geneva,sans-serif',
+    georgia: 'Georgia,"Times New Roman",serif',
+    times:   '"Times New Roman",Times,serif'
+  };
+  var prefs = { tema: "sistema", paleta: "azul", fonte: "sistema", tamanho: 100 };
+  function carregarPrefs() {
+    try {
+      var o = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}");
+      Object.keys(prefs).forEach(function (k) { if (o[k] !== undefined) prefs[k] = o[k]; });
+    } catch (e) {}
+  }
+  function salvarPrefs() {
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) {}
+  }
+  var mqEscuro = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  function escuroAtivo() {
+    return prefs.tema === "escuro" || (prefs.tema === "sistema" && !!(mqEscuro && mqEscuro.matches));
+  }
+  function aplicarPrefs() {
+    var root = document.documentElement;
+    if (prefs.tema === "sistema") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", prefs.tema === "escuro" ? "dark" : "light");
+    var pal = PALETAS[prefs.paleta] || PALETAS.azul;
+    root.style.setProperty("--accent", escuroAtivo() ? pal.escuro : pal.claro);
+    root.style.setProperty("--sans", FONTES[prefs.fonte] || FONTES.sistema);
+    document.body.style.zoom = String(prefs.tamanho / 100);
+  }
+  function pintarAjustes() {
+    $("ajTema").value = prefs.tema;
+    $("ajFonte").value = FONTES[prefs.fonte] ? prefs.fonte : "sistema";
+    $("ajTamanho").value = String(prefs.tamanho);
+    $("ajTamanhoV").textContent = prefs.tamanho + "%";
+    $("ajPaletas").innerHTML = Object.keys(PALETAS).map(function (k) {
+      var on = k === prefs.paleta;
+      return '<button type="button" data-pal="' + k + '" aria-pressed="' + on + '">' +
+        '<span class="sw" style="background:' + PALETAS[k].claro + '"></span>' + PALETAS[k].nome + "</button>";
+    }).join("");
+  }
+  $("ajTema").addEventListener("change", function () { prefs.tema = this.value; salvarPrefs(); aplicarPrefs(); });
+  $("ajFonte").addEventListener("change", function () { prefs.fonte = this.value; salvarPrefs(); aplicarPrefs(); });
+  $("ajTamanho").addEventListener("input", function () {
+    prefs.tamanho = Number(this.value); $("ajTamanhoV").textContent = prefs.tamanho + "%";
+    salvarPrefs(); aplicarPrefs();
+  });
+  $("ajPaletas").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("[data-pal]") : null;
+    if (!b) return;
+    prefs.paleta = b.getAttribute("data-pal");
+    salvarPrefs(); aplicarPrefs(); pintarAjustes();
+  });
+  if (mqEscuro && mqEscuro.addEventListener) mqEscuro.addEventListener("change", aplicarPrefs);
+
+  carregarPrefs();
+  aplicarPrefs();
+  pintarAjustes();
 
   load();
   $("data").value = todayIso();
