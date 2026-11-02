@@ -90,6 +90,13 @@ input[type="file"]{font-size:14px;padding:8px}
 .dlg-box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:8px;width:min(380px,100%)}
 .dlg-box p{margin:0 0 4px;font-weight:600}
 .dlg-box button{width:100%}
+.mes-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.mes-nav strong{flex:1;text-align:center;min-width:140px}
+.pasta{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;min-width:0}
+.pasta summary{cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.pasta summary .d{font-weight:600;overflow-wrap:anywhere}
+.pasta summary .m{font-size:12px;color:var(--muted)}
+.pasta .parcelas{margin-top:8px;border-top:1px solid var(--line);padding-top:4px}
 details.sec{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
 details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-position:inside}
 .aj-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px}
@@ -190,6 +197,13 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
   <section>
     <h2>Extrato</h2>
     <div class="btns" style="margin-bottom:10px"><button id="btnPdf" title="Gerar o extrato em PDF para imprimir ou compartilhar">Extrato em PDF</button></div>
+    <div class="mes-nav">
+      <button id="mesAnt" aria-label="Mês anterior">‹</button>
+      <strong id="mesLabel"></strong>
+      <button id="mesProx" aria-label="Próximo mês">›</button>
+      <button id="mesTodos" class="ghost">Ver todos</button>
+    </div>
+    <div class="cards" id="cardsMes"></div>
     <div class="filters" id="filters"></div>
     <div id="list"></div>
   </section>
@@ -240,7 +254,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 <script>
 (function () {
   var KEY = "carteira-pessoal-v1";
-  var state = { tipo: "saida", filtro: "Todas", items: [], anexarId: null };
+  var state = { tipo: "saida", filtro: "Todas", items: [], anexarId: null, mes: todayIso().slice(0, 7), todosMeses: false };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -397,18 +411,28 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 
     var pend = items.filter(function (r) { return r.situacao !== "realizado"; })
       .sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
-    $("pend").innerHTML = pend.length ? pend.map(function (r) {
-      var isLate = r.data && r.data < today;
-      return rowHtml(r, isLate ? '<span class="tag late">atrasado</span>' : '<span class="tag">previsto</span>');
-    }).join("") : '<div class="empty"><strong>Nenhuma pendência.</strong>Tudo confirmado.</div>';
+    $("pend").innerHTML = pend.length ? renderLista(pend, today, false) : '<div class="empty"><strong>Nenhuma pendência.</strong>Tudo confirmado.</div>';
 
-    var list = items.filter(function (r) { return state.filtro === "Todas" || r.area === state.filtro; })
-      .sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); });
-    $("list").innerHTML = list.length ? list.map(function (r) {
-      var done = r.situacao === "realizado";
-      var tag = done ? '<span class="tag ok">' + (r.tipo === "entrada" ? "recebido" : "pago") + "</span>" : '<span class="tag">previsto</span>';
-      return rowHtml(r, tag);
-    }).join("") : '<div class="empty"><strong>Nenhum lançamento ainda.</strong>Use o formulário acima para começar.</div>';
+    var noMes = items.filter(function (r) {
+      return (state.todosMeses || r.data.slice(0, 7) === state.mes) && (state.filtro === "Todas" || r.area === state.filtro);
+    });
+    var lista = noMes.slice().sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); });
+    $("list").innerHTML = lista.length ? renderLista(lista, today, true) : '<div class="empty"><strong>Nenhum lançamento neste período.</strong>Troque o mês ou use o formulário acima.</div>';
+
+    var em = noMes.filter(function (r) { return r.tipo === "entrada"; });
+    var sm = noMes.filter(function (r) { return r.tipo === "saida"; });
+    var recM = sum(em.filter(function (r) { return r.situacao === "realizado"; }));
+    var pagM = sum(sm.filter(function (r) { return r.situacao === "realizado"; }));
+    var aRecM = sum(em.filter(function (r) { return r.situacao !== "realizado"; }));
+    var aPagM = sum(sm.filter(function (r) { return r.situacao !== "realizado"; }));
+    var saldoM = recM - pagM, prevM = saldoM + aRecM - aPagM;
+    $("mesLabel").textContent = state.todosMeses ? "Todos os meses" : rotuloMes(state.mes);
+    $("mesTodos").textContent = state.todosMeses ? "Ver por mês" : "Ver todos";
+    $("cardsMes").innerHTML =
+      card("Saldo do mês", brl(saldoM), saldoM >= 0 ? "pos" : "neg") +
+      card("Previsto do mês", brl(prevM), prevM >= 0 ? "pos" : "neg") +
+      card("A receber no mês", brl(aRecM), "pos") +
+      card("A pagar no mês", brl(aPagM), "neg");
 
     var atrasadosPagar = items.filter(function (r) { return r.tipo === "saida" && r.situacao !== "realizado" && r.data && r.data < today; });
     var atrasadosReceber = items.filter(function (r) { return r.tipo === "entrada" && r.situacao !== "realizado" && r.data && r.data < today; });
@@ -427,6 +451,59 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     }
 
     refreshAnexos();
+  }
+
+  /* ---------- pastas de série e controle mensal ---------- */
+  function sumOf(arr) { return arr.reduce(function (a, r) { return a + Number(r.valor || 0); }, 0); }
+  var MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  function rotuloMes(ym) { var p = ym.split("-"); return MESES[Number(p[1]) - 1] + " de " + p[0]; }
+  function mudaMes(delta) {
+    var p = state.mes.split("-").map(Number);
+    var d = new Date(p[0], p[1] - 1 + delta, 1);
+    state.mes = d.getFullYear() + "-" + p2(d.getMonth() + 1);
+    state.todosMeses = false;
+    render();
+  }
+  function pastaHtml(serieId, today, soMes) {
+    var parcelas = state.items.filter(function (x) {
+      return x.serie === serieId && (state.filtro === "Todas" || x.area === state.filtro);
+    }).sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
+    if (!parcelas.length) return "";
+    var base = parcelas[0];
+    var entrada = base.tipo === "entrada";
+    var total = sumOf(parcelas);
+    var feitas = parcelas.filter(function (x) { return x.situacao === "realizado"; });
+    var emAberto = sumOf(parcelas.filter(function (x) { return x.situacao !== "realizado"; }));
+    var doMes = parcelas.filter(function (x) { return x.data.slice(0, 7) === state.mes; });
+    var neste = (!state.todosMeses && doMes.length)
+      ? " · neste mês: " + brl(sumOf(doMes)) + (doMes[0].situacao === "realizado" ? " (feito)" : " (previsto)") : "";
+    return '<details class="pasta"><summary>' +
+      '<div><div class="d">' + esc(base.descricao) + "</div>" +
+      '<div class="m">' + esc(base.area || "") + " · " + parcelas.length + " parcelas · " + feitas.length + " de " + parcelas.length + (entrada ? " recebidas" : " pagas") + esc(neste) + "</div>" +
+      '<div class="m">Em aberto: ' + esc(brl(emAberto)) + "</div></div>" +
+      '<div class="val ' + (entrada ? "pos" : "neg") + '">' + (entrada ? "+" : "−") + esc(brl(total)) +
+      '<div class="m" style="text-align:right">pedido total</div></div>' +
+      "</summary>" +
+      '<div class="parcelas">' + (soMes && !state.todosMeses ? doMes : parcelas).map(function (r) {
+        var done = r.situacao === "realizado";
+        var tag = done ? '<span class="tag ok">' + (entrada ? "recebido" : "pago") + "</span>"
+          : (r.data < today ? '<span class="tag late">atrasado</span>' : '<span class="tag">previsto</span>');
+        return rowHtml(r, tag);
+      }).join("") + "</div></details>";
+  }
+  function renderLista(lista, today, soMes) {
+    var vistos = {};
+    return lista.map(function (r) {
+      if (r.serie) {
+        if (vistos[r.serie]) return "";
+        vistos[r.serie] = true;
+        return pastaHtml(r.serie, today, soMes);
+      }
+      var done = r.situacao === "realizado";
+      var tag = done ? '<span class="tag ok">' + (r.tipo === "entrada" ? "recebido" : "pago") + "</span>"
+        : (r.data && r.data < today ? '<span class="tag late">atrasado</span>' : '<span class="tag">previsto</span>');
+      return rowHtml(r, tag);
+    }).join("");
   }
 
   function card(label, value, cls) {
@@ -668,6 +745,8 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     $("form").reset();
     $("data").value = todayIso();
     setTipo("saida");
+    state.mes = base.data.slice(0, 7);
+    state.todosMeses = false;
     render();
     toast(n > 1 ? n + " lançamentos criados." : "Lançamento salvo.");
     if (anexos.length) {
@@ -807,7 +886,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
   }
   function gerarExtratoPdf() {
     var today = todayIso();
-    var itens = state.items.filter(function (r) { return state.filtro === "Todas" || r.area === state.filtro; })
+    var itens = state.items.filter(function (r) { return (state.todosMeses || r.data.slice(0, 7) === state.mes) && (state.filtro === "Todas" || r.area === state.filtro); })
       .sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); });
     var soma = function (arr) { return arr.reduce(function (a, r) { return a + Number(r.valor || 0); }, 0); };
     var ent = itens.filter(function (r) { return r.tipo === "entrada"; });
@@ -822,7 +901,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 
     var cab = [
       { t: "CARTEIRA PESSOAL - EXTRATO", b: true },
-      { t: "Area: " + state.filtro + "    Emitido em: " + emitido },
+      { t: "Periodo: " + (state.todosMeses ? "todos os meses" : rotuloMes(state.mes)) + "    Area: " + state.filtro + "    Emitido em: " + emitido },
       { t: "" },
       { t: "Saldo atual: " + brl(saldo) + "    Saldo previsto: " + brl(previsto) },
       { t: "A pagar: " + brl(aPagar) + "    A receber: " + brl(aReceber) + "    Atrasados: " + late },
@@ -843,6 +922,10 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     for (var i = 0; i < todas.length; i += 50) paginas.push(todas.slice(i, i + 50));
     return pdfGerar(paginas);
   }
+  $("mesAnt").addEventListener("click", function () { mudaMes(-1); });
+  $("mesProx").addEventListener("click", function () { mudaMes(1); });
+  $("mesTodos").addEventListener("click", function () { state.todosMeses = !state.todosMeses; render(); });
+
   $("btnPdf").addEventListener("click", function () {
     var file = new File([gerarExtratoPdf()], "extrato-carteira-" + todayIso() + ".pdf", { type: "application/pdf" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
