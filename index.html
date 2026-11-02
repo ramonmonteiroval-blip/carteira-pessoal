@@ -92,6 +92,8 @@ input[type="file"]{font-size:14px;padding:8px}
 .dlg-box button{width:100%}
 .mes-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .mes-nav strong{flex:1;text-align:center;min-width:140px}
+.periodo{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px}
+.periodo label{flex:1;min-width:140px}
 .pasta{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;min-width:0}
 .pasta summary{cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center}
 .pasta summary .d{font-weight:600;overflow-wrap:anywhere}
@@ -201,7 +203,13 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
       <button id="mesAnt" aria-label="Mês anterior">‹</button>
       <strong id="mesLabel"></strong>
       <button id="mesProx" aria-label="Próximo mês">›</button>
+      <button id="mesPeriodo" class="ghost">Período</button>
       <button id="mesTodos" class="ghost">Ver todos</button>
+    </div>
+    <div class="periodo" id="periodoBox" hidden>
+      <label>De <input id="perDe" type="date"></label>
+      <label>Até <input id="perAte" type="date"></label>
+      <button id="perAplicar" class="primary">Aplicar período</button>
     </div>
     <div class="cards" id="cardsMes"></div>
     <div class="filters" id="filters"></div>
@@ -254,7 +262,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 <script>
 (function () {
   var KEY = "carteira-pessoal-v1";
-  var state = { tipo: "saida", filtro: "Todas", items: [], anexarId: null, mes: todayIso().slice(0, 7), todosMeses: false };
+  var state = { tipo: "saida", filtro: "Todas", items: [], anexarId: null, mes: todayIso().slice(0, 7), todosMeses: false, periodo: null };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -414,7 +422,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     $("pend").innerHTML = pend.length ? renderLista(pend, today, false) : '<div class="empty"><strong>Nenhuma pendência.</strong>Tudo confirmado.</div>';
 
     var noMes = items.filter(function (r) {
-      return (state.todosMeses || r.data.slice(0, 7) === state.mes) && (state.filtro === "Todas" || r.area === state.filtro);
+      return noPeriodo(r) && (state.filtro === "Todas" || r.area === state.filtro);
     });
     var lista = noMes.slice().sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); });
     $("list").innerHTML = lista.length ? renderLista(lista, today, true) : '<div class="empty"><strong>Nenhum lançamento neste período.</strong>Troque o mês ou use o formulário acima.</div>';
@@ -426,8 +434,8 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     var aRecM = sum(em.filter(function (r) { return r.situacao !== "realizado"; }));
     var aPagM = sum(sm.filter(function (r) { return r.situacao !== "realizado"; }));
     var saldoM = recM - pagM, prevM = saldoM + aRecM - aPagM;
-    $("mesLabel").textContent = state.todosMeses ? "Todos os meses" : rotuloMes(state.mes);
-    $("mesTodos").textContent = state.todosMeses ? "Ver por mês" : "Ver todos";
+    $("mesLabel").textContent = rotuloPeriodo();
+    $("mesTodos").textContent = state.periodo ? "Voltar ao mês" : (state.todosMeses ? "Ver por mês" : "Ver todos");
     $("cardsMes").innerHTML =
       card("Saldo do mês", brl(saldoM), saldoM >= 0 ? "pos" : "neg") +
       card("Previsto do mês", brl(prevM), prevM >= 0 ? "pos" : "neg") +
@@ -462,7 +470,17 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     var d = new Date(p[0], p[1] - 1 + delta, 1);
     state.mes = d.getFullYear() + "-" + p2(d.getMonth() + 1);
     state.todosMeses = false;
+    state.periodo = null;
     render();
+  }
+  function noPeriodo(r) {
+    if (state.periodo) return r.data >= state.periodo.de && r.data <= state.periodo.ate;
+    if (state.todosMeses) return true;
+    return r.data.slice(0, 7) === state.mes;
+  }
+  function rotuloPeriodo() {
+    if (state.periodo) return "De " + fmtDate(state.periodo.de) + " a " + fmtDate(state.periodo.ate);
+    return state.todosMeses ? "Todos os meses" : rotuloMes(state.mes);
   }
   function pastaHtml(serieId, today, soMes) {
     var parcelas = state.items.filter(function (x) {
@@ -475,7 +493,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     var feitas = parcelas.filter(function (x) { return x.situacao === "realizado"; });
     var emAberto = sumOf(parcelas.filter(function (x) { return x.situacao !== "realizado"; }));
     var doMes = parcelas.filter(function (x) { return x.data.slice(0, 7) === state.mes; });
-    var neste = (!state.todosMeses && doMes.length)
+    var neste = (!state.todosMeses && !state.periodo && doMes.length)
       ? " · neste mês: " + brl(sumOf(doMes)) + (doMes[0].situacao === "realizado" ? " (feito)" : " (previsto)") : "";
     return '<details class="pasta"><summary>' +
       '<div><div class="d">' + esc(base.descricao) + "</div>" +
@@ -484,7 +502,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
       '<div class="val ' + (entrada ? "pos" : "neg") + '">' + (entrada ? "+" : "−") + esc(brl(total)) +
       '<div class="m" style="text-align:right">pedido total</div></div>' +
       "</summary>" +
-      '<div class="parcelas">' + (soMes && !state.todosMeses ? doMes : parcelas).map(function (r) {
+      '<div class="parcelas">' + (soMes && !state.todosMeses && !state.periodo ? doMes : parcelas).map(function (r) {
         var done = r.situacao === "realizado";
         var tag = done ? '<span class="tag ok">' + (entrada ? "recebido" : "pago") + "</span>"
           : (r.data < today ? '<span class="tag late">atrasado</span>' : '<span class="tag">previsto</span>');
@@ -884,7 +902,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
   }
   function gerarExtratoPdf() {
     var today = todayIso();
-    var itens = state.items.filter(function (r) { return (state.todosMeses || r.data.slice(0, 7) === state.mes) && (state.filtro === "Todas" || r.area === state.filtro); })
+    var itens = state.items.filter(function (r) { return noPeriodo(r) && (state.filtro === "Todas" || r.area === state.filtro); })
       .sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); });
     var soma = function (arr) { return arr.reduce(function (a, r) { return a + Number(r.valor || 0); }, 0); };
     var ent = itens.filter(function (r) { return r.tipo === "entrada"; });
@@ -899,7 +917,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 
     var cab = [
       { t: "CARTEIRA PESSOAL - EXTRATO", b: true },
-      { t: "Periodo: " + (state.todosMeses ? "todos os meses" : rotuloMes(state.mes)) + "    Area: " + state.filtro + "    Emitido em: " + emitido },
+      { t: "Periodo: " + rotuloPeriodo() + "    Area: " + state.filtro + "    Emitido em: " + emitido },
       { t: "" },
       { t: "Saldo atual: " + brl(saldo) + "    Saldo previsto: " + brl(previsto) },
       { t: "A pagar: " + brl(aPagar) + "    A receber: " + brl(aReceber) + "    Atrasados: " + late },
@@ -922,7 +940,20 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
   }
   $("mesAnt").addEventListener("click", function () { mudaMes(-1); });
   $("mesProx").addEventListener("click", function () { mudaMes(1); });
-  $("mesTodos").addEventListener("click", function () { state.todosMeses = !state.todosMeses; render(); });
+  $("mesTodos").addEventListener("click", function () {
+    if (state.periodo) state.periodo = null;
+    else state.todosMeses = !state.todosMeses;
+    render();
+  });
+  $("mesPeriodo").addEventListener("click", function () { $("periodoBox").hidden = !$("periodoBox").hidden; });
+  $("perAplicar").addEventListener("click", function () {
+    var de = $("perDe").value, ate = $("perAte").value;
+    if (!de || !ate) { toast("Informe as duas datas."); return; }
+    if (de > ate) { toast("A data inicial é depois da final."); return; }
+    state.periodo = { de: de, ate: ate };
+    state.todosMeses = false;
+    render();
+  });
 
   $("btnPdf").addEventListener("click", function () {
     var file = new File([gerarExtratoPdf()], "extrato-carteira-" + todayIso() + ".pdf", { type: "application/pdf" });
