@@ -78,6 +78,10 @@ input[type="file"]{font-size:14px;padding:8px}
 .anx:empty{display:none}
 .anx-item{display:inline-flex;align-items:center;max-width:100%;min-width:0}
 .anx-item button{text-align:left;overflow-wrap:anywhere;font-size:13px}
+.alerta{background:var(--panel);border:1px solid var(--loss);border-left:6px solid var(--loss);border-radius:8px;padding:10px 14px;cursor:pointer;display:grid;gap:4px;font-size:14px;color:var(--ink)}
+.alerta strong{color:var(--loss)}
+.alerta.hoje{border-color:var(--warn);border-left-color:var(--warn)}
+.alerta.hoje strong{color:var(--warn)}
 .empty{text-align:center;color:var(--muted);padding:24px 8px}
 .empty strong{display:block;color:var(--ink);margin-bottom:6px}
 .hint{font-size:12px;color:var(--muted)}
@@ -100,6 +104,7 @@ input[type="file"]{font-size:14px;padding:8px}
     </div>
   </header>
 
+  <div class="alerta" id="alerta" role="alert" hidden></div>
   <div class="cards" id="cards"></div>
 
   <section>
@@ -144,6 +149,7 @@ input[type="file"]{font-size:14px;padding:8px}
 
   <section>
     <h2>Extrato</h2>
+    <div class="btns" style="margin-bottom:10px"><button id="btnPdf" title="Gerar o extrato em PDF para imprimir ou compartilhar">Extrato em PDF</button></div>
     <div class="filters" id="filters"></div>
     <div id="list"></div>
   </section>
@@ -327,6 +333,22 @@ input[type="file"]{font-size:14px;padding:8px}
       return rowHtml(r, tag);
     }).join("") : '<div class="empty"><strong>Nenhum lançamento ainda.</strong>Use o formulário acima para começar.</div>';
 
+    var atrasadosPagar = items.filter(function (r) { return r.tipo === "saida" && r.situacao !== "realizado" && r.data && r.data < today; });
+    var atrasadosReceber = items.filter(function (r) { return r.tipo === "entrada" && r.situacao !== "realizado" && r.data && r.data < today; });
+    var venceHoje = items.filter(function (r) { return r.situacao !== "realizado" && r.data === today; });
+    var linhasAl = [];
+    if (atrasadosPagar.length) linhasAl.push("<strong>" + atrasadosPagar.length + " conta(s) a pagar atrasada(s)</strong> · " + esc(brl(sum(atrasadosPagar))));
+    if (atrasadosReceber.length) linhasAl.push("<strong>" + atrasadosReceber.length + " a receber atrasado(s)</strong> · " + esc(brl(sum(atrasadosReceber))));
+    if (venceHoje.length) linhasAl.push(venceHoje.length + " vencimento(s) hoje · " + esc(brl(sum(venceHoje))));
+    var al = $("alerta");
+    if (linhasAl.length) {
+      al.innerHTML = linhasAl.join("<br>") + '<span class="hint">Toque para ver as pendências</span>';
+      al.className = "alerta" + (atrasadosPagar.length || atrasadosReceber.length ? "" : " hoje");
+      al.hidden = false;
+    } else {
+      al.hidden = true;
+    }
+
     refreshAnexos();
   }
 
@@ -392,6 +414,17 @@ input[type="file"]{font-size:14px;padding:8px}
     $("tEntrada").setAttribute("aria-pressed", String(t === "entrada"));
     $("tSaida").setAttribute("aria-pressed", String(t === "saida"));
   }
+
+  /* valor em moeda: o que você digita vira centavos automaticamente (12345 -> 123,45) */
+  function formatarMoeda(el) {
+    var d = el.value.replace(/\D/g, "");
+    if (!d) { el.value = ""; return; }
+    d = d.replace(/^0+(?=\d)/, "");
+    while (d.length < 3) d = "0" + d;
+    var inteiro = d.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    el.value = inteiro + "," + d.slice(-2);
+  }
+  $("valor").addEventListener("input", function () { formatarMoeda(this); });
 
   $("tEntrada").addEventListener("click", function () { setTipo("entrada"); });
   $("tSaida").addEventListener("click", function () { setTipo("saida"); });
@@ -480,13 +513,13 @@ input[type="file"]{font-size:14px;padding:8px}
   });
 
   /* ---------- cópia de segurança e restauração ---------- */
-  function baixarArquivo(file) {
+  function baixarArquivo(file, msg) {
     var url = URL.createObjectURL(file);
     var a = document.createElement("a");
     a.href = url; a.download = file.name;
     document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 2000);
-    toast("Cópia baixada.");
+    toast(msg || "Cópia baixada.");
   }
   $("btnCopia").addEventListener("click", function () {
     var conteudo = JSON.stringify({ app: "carteira-pessoal", versao: 1, exportado: new Date().toISOString(), lancamentos: state.items }, null, 2);
@@ -519,6 +552,96 @@ input[type="file"]{font-size:14px;padding:8px}
       } catch (err) { toast("Arquivo inválido."); }
     };
     reader.readAsText(f);
+  });
+
+  /* ---------- extrato em PDF (gerado no aparelho, sem biblioteca) ---------- */
+  function pdfEsc(s) {
+    return String(s == null ? "" : s).replace(/\u00a0/g, " ").replace(/[^\x00-\xFF]/g, "?")
+      .replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/[\r\n]+/g, " ");
+  }
+  function pdfGerar(paginas) {
+    var objs = [];
+    var kids = paginas.map(function (_, i) { return (5 + 2 * i) + " 0 R"; });
+    objs[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+    objs[2] = "<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + paginas.length + " >>";
+    objs[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>";
+    objs[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>";
+    paginas.forEach(function (linhas, i) {
+      var pno = 5 + 2 * i, cno = 6 + 2 * i;
+      var c = "BT 14 TL 36 806 Td ";
+      linhas.forEach(function (l) { c += "/" + (l.b ? "F2" : "F1") + " 9 Tf (" + pdfEsc(l.t) + ") Tj T* "; });
+      c += "ET";
+      objs[pno] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents " + cno + " 0 R >>";
+      objs[cno] = "<< /Length " + c.length + " >>\nstream\n" + c + "\nendstream";
+    });
+    var out = "%PDF-1.4\n", offs = [];
+    for (var k = 1; k < objs.length; k++) { offs[k] = out.length; out += k + " 0 obj\n" + objs[k] + "\nendobj\n"; }
+    var xref = out.length;
+    out += "xref\n0 " + objs.length + "\n0000000000 65535 f \n";
+    for (k = 1; k < objs.length; k++) out += ("0000000000" + offs[k]).slice(-10) + " 00000 n \n";
+    out += "trailer\n<< /Size " + objs.length + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF\n";
+    var bytes = new Uint8Array(out.length);
+    for (var j = 0; j < out.length; j++) bytes[j] = out.charCodeAt(j) & 255;
+    return new Blob([bytes], { type: "application/pdf" });
+  }
+  function pad(s, n) {
+    s = String(s == null ? "" : s);
+    return s.length > n ? s.slice(0, n - 1) + "." : s + new Array(n - s.length + 1).join(" ");
+  }
+  function padL(s, n) {
+    s = String(s);
+    return s.length >= n ? s : new Array(n - s.length + 1).join(" ") + s;
+  }
+  function gerarExtratoPdf() {
+    var today = todayIso();
+    var itens = state.items.filter(function (r) { return state.filtro === "Todas" || r.area === state.filtro; })
+      .sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); });
+    var soma = function (arr) { return arr.reduce(function (a, r) { return a + Number(r.valor || 0); }, 0); };
+    var ent = itens.filter(function (r) { return r.tipo === "entrada"; });
+    var sai = itens.filter(function (r) { return r.tipo === "saida"; });
+    var saldo = soma(ent.filter(function (r) { return r.situacao === "realizado"; })) - soma(sai.filter(function (r) { return r.situacao === "realizado"; }));
+    var aReceber = soma(ent.filter(function (r) { return r.situacao !== "realizado"; }));
+    var aPagar = soma(sai.filter(function (r) { return r.situacao !== "realizado"; }));
+    var previsto = saldo + aReceber - aPagar;
+    var late = itens.filter(function (r) { return r.situacao !== "realizado" && r.data && r.data < today; }).length;
+    var agora = new Date(), p2 = function (n) { return (n < 10 ? "0" : "") + n; };
+    var emitido = fmtDate(today) + " " + p2(agora.getHours()) + ":" + p2(agora.getMinutes());
+
+    var cab = [
+      { t: "CARTEIRA PESSOAL - EXTRATO", b: true },
+      { t: "Area: " + state.filtro + "    Emitido em: " + emitido },
+      { t: "" },
+      { t: "Saldo atual: " + brl(saldo) + "    Saldo previsto: " + brl(previsto) },
+      { t: "A pagar: " + brl(aPagar) + "    A receber: " + brl(aReceber) + "    Atrasados: " + late },
+      { t: "" },
+      { t: pad("DATA", 10) + " " + pad("DESCRICAO", 26) + " " + pad("AREA", 14) + " " + pad("TIPO", 8) + " " + pad("SITUACAO", 10) + " " + padL("VALOR", 16), b: true },
+      { t: new Array(90).join("-") }
+    ];
+    var corpo = itens.length ? itens.map(function (r) {
+      var sinal = r.tipo === "entrada" ? "+" : "-";
+      var sit = r.situacao === "realizado" ? (r.tipo === "entrada" ? "Recebido" : "Pago") : "Previsto";
+      return { t: pad(fmtDate(r.data), 10) + " " + pad(r.descricao, 26) + " " + pad(r.area || "", 14) + " " +
+        pad(r.tipo === "entrada" ? "Entrada" : "Saída", 8) + " " + pad(sit, 10) + " " + padL(sinal + brl(r.valor), 16) };
+    }) : [{ t: "Nenhum lançamento." }];
+    var rodape = [{ t: "" }, { t: "Total de lançamentos: " + itens.length }];
+
+    var todas = cab.concat(corpo, rodape);
+    var paginas = [];
+    for (var i = 0; i < todas.length; i += 50) paginas.push(todas.slice(i, i + 50));
+    return pdfGerar(paginas);
+  }
+  $("btnPdf").addEventListener("click", function () {
+    var file = new File([gerarExtratoPdf()], "extrato-carteira-" + todayIso() + ".pdf", { type: "application/pdf" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: "Extrato - Carteira Pessoal" })
+        .then(function () { toast("Extrato enviado."); })
+        .catch(function (err) { if (err && err.name === "AbortError") return; baixarArquivo(file, "Extrato baixado."); });
+      return;
+    }
+    baixarArquivo(file, "Extrato baixado.");
+  });
+  $("alerta").addEventListener("click", function () {
+    $("pend").scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   $("btnAtualizar").addEventListener("click", function () {
