@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B3C5D">
+<title>Carteira Pessoal</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B3C5D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carteira">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230B3C5D'/%3E%3Crect x='12' y='22' width='40' height='28' rx='5' fill='none' stroke='%238CC4EA' stroke-width='4'/%3E%3Cpath d='M12 30h40' stroke='%238CC4EA' stroke-width='4'/%3E%3Ccircle cx='44' cy='39' r='3.5' fill='%233DD68C'/%3E%3Ctext x='32' y='17' font-family='monospace' font-size='15' font-weight='700' text-anchor='middle' fill='%233DD68C'%3E%24%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#F2F5F7;--panel:#FFFFFF;--ink:#0B1F33;--muted:#5A6B7D;--line:#D9E1E8;
+  --gain:#0B7A46;--loss:#B53436;--warn:#9A6A00;--accent:#0B3C5D;--accent-ink:#FFFFFF;
+  --mono:ui-monospace,Menlo,Consolas,"Courier New",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#09141E;--panel:#10202E;--ink:#E4EDF5;--muted:#8DA2B5;--line:#22384C;
+    --gain:#3DD68C;--loss:#F0686A;--warn:#E8B54A;--accent:#1B5A86;--accent-ink:#E4EDF5;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#09141E;--panel:#10202E;--ink:#E4EDF5;--muted:#8DA2B5;--line:#22384C;
+  --gain:#3DD68C;--loss:#F0686A;--warn:#E8B54A;--accent:#1B5A86;--accent-ink:#E4EDF5;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-text-size-adjust:100%}
+body{padding-block:calc(16px + env(safe-area-inset-top,0px)) calc(32px + env(safe-area-inset-bottom,0px));padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));line-height:1.4}
+.wrap{max-width:900px;margin:0 auto;display:grid;gap:14px;min-width:0}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px}
+.brand svg{width:34px;height:34px}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+button,.btn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 12px;border-radius:6px;cursor:pointer;min-height:40px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button.ghost{border-color:transparent;background:transparent;color:var(--muted);min-height:auto;padding:4px 6px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.card .l{font-size:12px;color:var(--muted)}
+.card .v{font-family:var(--mono);font-size:19px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.pos{color:var(--gain)}.neg{color:var(--loss)}.warn{color:var(--warn)}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px;font-weight:600}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+label{display:grid;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;border:0;border-radius:0;min-height:40px}
+.seg button[aria-pressed="true"].in{background:var(--gain);color:#fff}
+.seg button[aria-pressed="true"].out{background:var(--loss);color:#fff}
+.form-actions{grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chip{border-radius:999px;padding:4px 12px;font-size:13px;min-height:auto}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.row{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
+.row:last-child{border-bottom:0}
+.row .d{font-weight:600;overflow-wrap:anywhere}
+.row .m{font-size:12px;color:var(--muted)}
+.row .val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;text-align:right;white-space:nowrap}
+.tag{display:inline-block;font-size:11px;padding:1px 6px;border:1px solid var(--line);border-radius:3px;color:var(--muted);margin-left:6px}
+.tag.ok{color:var(--gain);border-color:var(--gain)}
+.tag.late{color:var(--loss);border-color:var(--loss)}
+.act{display:flex;gap:4px;justify-content:flex-end;margin-top:2px}
+.empty{text-align:center;color:var(--muted);padding:24px 8px}
+.empty strong{display:block;color:var(--ink);margin-bottom:6px}
+.hint{font-size:12px;color:var(--muted)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:6px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0B3C5D"/><rect x="12" y="22" width="40" height="28" rx="5" fill="none" stroke="#8CC4EA" stroke-width="4"/><path d="M12 30h40" stroke="#8CC4EA" stroke-width="4"/><circle cx="44" cy="39" r="3.5" fill="#3DD68C"/><text x="32" y="17" font-family="monospace" font-size="15" font-weight="700" text-anchor="middle" fill="#3DD68C">$</text></svg>
+      <span>Carteira Pessoal</span>
+    </div>
+    <div class="btns">
+      <button id="btnExport" title="Salvar uma cópia dos dados">Exportar</button>
+      <button id="btnImport" title="Carregar uma cópia salva">Importar</button>
+      <input id="fileImport" type="file" accept="application/json,.json" hidden>
+    </div>
+  </header>
+
+  <div class="cards" id="cards"></div>
+
+  <section>
+    <h2>Novo lançamento</h2>
+    <form id="form" autocomplete="off">
+      <div class="seg" style="grid-column:1/-1">
+        <button type="button" id="tEntrada" class="in" aria-pressed="false">Entrada</button>
+        <button type="button" id="tSaida" class="out" aria-pressed="true">Saída</button>
+      </div>
+      <label>Valor (R$)<input id="valor" inputmode="decimal" placeholder="0,00" required></label>
+      <label>Descrição<input id="descricao" placeholder="Ex.: material de obra" required></label>
+      <label>Área
+        <input id="area" list="areas" placeholder="casa, obra, fazenda…" required>
+        <datalist id="areas">
+          <option value="Casa"></option><option value="Obra"></option><option value="Fazenda"></option>
+          <option value="Aluguel de carro"></option><option value="Vendas particulares"></option>
+          <option value="Pessoal"></option><option value="Empresa"></option>
+        </datalist>
+      </label>
+      <label>Categoria<input id="categoria" placeholder="Ex.: material, combustível"></label>
+      <label>Data<input id="data" type="date" required></label>
+      <label>Situação
+        <select id="situacao">
+          <option value="previsto">Previsto</option>
+          <option value="realizado">Pago / recebido</option>
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="reset" id="btnReset">Limpar</button>
+        <button type="submit" class="primary">Salvar lançamento</button>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    <h2>Pendências (a pagar e a receber)</h2>
+    <div id="pend"></div>
+  </section>
+
+  <section>
+    <h2>Extrato</h2>
+    <div class="filters" id="filters"></div>
+    <div id="list"></div>
+  </section>
+
+  <p class="hint">Os dados ficam salvos neste aparelho e funcionam sem internet. Use Exportar para guardar uma cópia.</p>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  var KEY = "carteira-pessoal-v1";
+  var state = { tipo: "saida", filtro: "Todas", items: [] };
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function brl(v) { return Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+  function todayIso() {
+    var t = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; };
+    return t.getFullYear() + "-" + p(t.getMonth() + 1) + "-" + p(t.getDate());
+  }
+  function fmtDate(iso) {
+    var p = String(iso || "").split("-");
+    return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : "sem data";
+  }
+  function parseValor(s) {
+    s = String(s || "").trim().replace(/\s/g, "");
+    if (!s) return NaN;
+    if (s.indexOf(",") > -1) s = s.replace(/\./g, "").replace(",", ".");
+    return Number(s);
+  }
+  function toast(msg) {
+    var t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200);
+  }
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      state.items = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(state.items)) state.items = [];
+    } catch (e) { state.items = []; }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state.items)); return true; }
+    catch (e) { toast("Não consegui salvar neste aparelho. Exporte uma cópia."); return false; }
+  }
+
+  function render() {
+    var today = todayIso();
+    var items = state.items;
+    var sum = function (arr) { return arr.reduce(function (a, r) { return a + Number(r.valor || 0); }, 0); };
+    var ent = items.filter(function (r) { return r.tipo === "entrada"; });
+    var sai = items.filter(function (r) { return r.tipo === "saida"; });
+    var recebido = sum(ent.filter(function (r) { return r.situacao === "realizado"; }));
+    var pago = sum(sai.filter(function (r) { return r.situacao === "realizado"; }));
+    var aReceber = sum(ent.filter(function (r) { return r.situacao !== "realizado"; }));
+    var aPagar = sum(sai.filter(function (r) { return r.situacao !== "realizado"; }));
+    var saldo = recebido - pago;
+    var previsto = saldo + aReceber - aPagar;
+    var late = items.filter(function (r) { return r.situacao !== "realizado" && r.data && r.data < today; }).length;
+
+    $("cards").innerHTML =
+      card("Saldo atual", brl(saldo), saldo >= 0 ? "pos" : "neg") +
+      card("Saldo previsto", brl(previsto), previsto >= 0 ? "pos" : "neg") +
+      card("A pagar", brl(aPagar), "neg") +
+      card("A receber", brl(aReceber), "pos") +
+      card("Atrasados", String(late), late ? "warn" : "");
+
+    var areas = {};
+    items.forEach(function (r) { if (r.area) areas[r.area] = true; });
+    var names = ["Todas"].concat(Object.keys(areas).sort());
+    if (names.indexOf(state.filtro) === -1) state.filtro = "Todas";
+    $("filters").innerHTML = names.map(function (n) {
+      return '<button class="chip" data-f="' + esc(n) + '" aria-pressed="' + (n === state.filtro) + '">' + esc(n) + "</button>";
+    }).join("");
+
+    var pend = items.filter(function (r) { return r.situacao !== "realizado"; })
+      .sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
+    $("pend").innerHTML = pend.length ? pend.map(function (r) {
+      var isLate = r.data && r.data < today;
+      return rowHtml(r, isLate ? '<span class="tag late">atrasado</span>' : '<span class="tag">previsto</span>');
+    }).join("") : '<div class="empty"><strong>Nenhuma pendência.</strong>Tudo confirmado.</div>';
+
+    var list = items.filter(function (r) { return state.filtro === "Todas" || r.area === state.filtro; })
+      .sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); });
+    $("list").innerHTML = list.length ? list.map(function (r) {
+      var done = r.situacao === "realizado";
+      var tag = done ? '<span class="tag ok">' + (r.tipo === "entrada" ? "recebido" : "pago") + "</span>" : '<span class="tag">previsto</span>';
+      return rowHtml(r, tag);
+    }).join("") : '<div class="empty"><strong>Nenhum lançamento ainda.</strong>Use o formulário acima para começar.</div>';
+  }
+
+  function card(label, value, cls) {
+    return '<div class="card"><div class="l">' + esc(label) + '</div><div class="v ' + cls + '">' + esc(value) + "</div></div>";
+  }
+  function rowHtml(r, tag) {
+    var sign = r.tipo === "entrada" ? "+" : "−";
+    var cls = r.tipo === "entrada" ? "pos" : "neg";
+    return '<div class="row">' +
+      '<div><div class="d">' + esc(r.descricao) + "</div>" +
+      '<div class="m">' + esc(fmtDate(r.data)) + " · " + esc(r.area || "") + (r.categoria ? " · " + esc(r.categoria) : "") + " " + tag + "</div>" +
+      '<div class="act">' +
+        '<button class="ghost" data-toggle="' + esc(r.id) + '">' + (r.situacao === "realizado" ? "Desfazer baixa" : "Dar baixa") + "</button>" +
+        '<button class="ghost" data-del="' + esc(r.id) + '">Excluir</button>' +
+      "</div></div>" +
+      '<div class="val ' + cls + '">' + sign + brl(r.valor) + "</div></div>";
+  }
+
+  function setTipo(t) {
+    state.tipo = t;
+    $("tEntrada").setAttribute("aria-pressed", String(t === "entrada"));
+    $("tSaida").setAttribute("aria-pressed", String(t === "saida"));
+  }
+
+  $("tEntrada").addEventListener("click", function () { setTipo("entrada"); });
+  $("tSaida").addEventListener("click", function () { setTipo("saida"); });
+
+  $("form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var valor = parseValor($("valor").value);
+    if (!(valor > 0)) { toast("Informe um valor maior que zero."); $("valor").focus(); return; }
+    var desc = $("descricao").value.trim();
+    if (!desc) { toast("Informe a descrição."); return; }
+    var item = {
+      id: String(Date.now()) + Math.random().toString(36).slice(2, 7),
+      tipo: state.tipo,
+      valor: Math.round(valor * 100) / 100,
+      descricao: desc,
+      area: $("area").value.trim(),
+      categoria: $("categoria").value.trim(),
+      data: $("data").value || todayIso(),
+      situacao: $("situacao").value
+    };
+    state.items.push(item);
+    if (!save()) { state.items.pop(); return; }
+    $("form").reset();
+    $("data").value = todayIso();
+    setTipo("saida");
+    render();
+    toast("Lançamento salvo.");
+  });
+
+  $("btnReset").addEventListener("click", function () {
+    setTimeout(function () { $("data").value = todayIso(); setTipo("saida"); }, 0);
+  });
+
+  document.addEventListener("click", function (e) {
+    var t = e.target;
+    if (t.getAttribute && t.getAttribute("data-f")) {
+      state.filtro = t.getAttribute("data-f"); render(); return;
+    }
+    if (t.getAttribute && t.getAttribute("data-toggle")) {
+      var id = t.getAttribute("data-toggle");
+      state.items.forEach(function (r) {
+        if (r.id === id) r.situacao = r.situacao === "realizado" ? "previsto" : "realizado";
+      });
+      save(); render(); return;
+    }
+    if (t.getAttribute && t.getAttribute("data-del")) {
+      var did = t.getAttribute("data-del");
+      var found = state.items.filter(function (r) { return r.id === did; })[0];
+      if (found && window.confirm("Excluir “" + found.descricao + "”?")) {
+        state.items = state.items.filter(function (r) { return r.id !== did; });
+        save(); render(); toast("Excluído.");
+      }
+    }
+  });
+
+  $("btnExport").addEventListener("click", function () {
+    var blob = new Blob([JSON.stringify({ app: "carteira-pessoal", versao: 1, exportado: new Date().toISOString(), lancamentos: state.items }, null, 2)], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "carteira-pessoal-" + todayIso() + ".json";
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  });
+
+  $("btnImport").addEventListener("click", function () { $("fileImport").click(); });
+  $("fileImport").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        var list = Array.isArray(data) ? data : data.lancamentos;
+        if (!Array.isArray(list)) throw new Error("formato");
+        if (!window.confirm("Substituir os lançamentos deste aparelho por " + list.length + " do arquivo?")) return;
+        state.items = list;
+        save(); render(); toast("Importado: " + list.length + " lançamento(s).");
+      } catch (err) { toast("Arquivo inválido."); }
+      e.target.value = "";
+    };
+    reader.readAsText(f);
+  });
+
+  load();
+  $("data").value = todayIso();
+  setTipo("saida");
+  render();
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }
+</script>
+</body>
+</html>
