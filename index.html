@@ -116,7 +116,7 @@ input[type="file"]{font-size:14px;padding:8px}
   <div class="cards" id="cards"></div>
 
   <section>
-    <h2>Novo lançamento</h2>
+    <h2 id="tituloForm">Novo lançamento</h2>
     <form id="form" autocomplete="off">
       <div class="seg" style="grid-column:1/-1">
         <button type="button" id="tEntrada" class="in" aria-pressed="false">Entrada</button>
@@ -169,7 +169,7 @@ input[type="file"]{font-size:14px;padding:8px}
       </label>
       <div class="form-actions">
         <button type="reset" id="btnReset">Limpar</button>
-        <button type="submit" class="primary">Salvar lançamento</button>
+        <button type="submit" class="primary" id="btnSalvar">Salvar lançamento</button>
       </div>
     </form>
   </section>
@@ -403,6 +403,7 @@ input[type="file"]{font-size:14px;padding:8px}
       '<div class="m">' + esc(fmtDate(r.data)) + " · " + esc(r.area || "") + (r.categoria ? " · " + esc(r.categoria) : "") + " " + tag + "</div>" +
       '<div class="anx" data-anx="' + esc(r.id) + '"></div>' +
       '<div class="act">' +
+        '<button class="ghost" data-editar="' + esc(r.id) + '">Editar</button>' +
         '<button class="ghost" data-agendar="' + esc(r.id) + '" title="Criar lembrete na agenda">Agendar</button>' +
         '<button class="ghost" data-anexar="' + esc(r.id) + '">Anexar</button>' +
         '<button class="ghost" data-toggle="' + esc(r.id) + '">' + (r.situacao === "realizado" ? "Desfazer baixa" : "Dar baixa") + "</button>" +
@@ -486,6 +487,73 @@ input[type="file"]{font-size:14px;padding:8px}
   }
   $("repetir").addEventListener("change", atualizaRepeticao);
 
+  /* ---------- edição (lançamento único ou série) ---------- */
+  function iniciarEdicao(id) {
+    var r = state.items.filter(function (x) { return x.id === id; })[0];
+    if (!r) return;
+    state.editId = id;
+    setTipo(r.tipo);
+    $("valor").value = String(Math.round(Number(r.valor) * 100));
+    formatarMoeda($("valor"));
+    $("descricao").value = r.descricao;
+    $("area").value = r.area || "";
+    $("categoria").value = r.categoria || "";
+    $("data").value = r.data;
+    $("situacao").value = r.situacao === "realizado" ? "realizado" : "previsto";
+    $("repetir").value = "0";
+    $("repetir").disabled = true;
+    atualizaRepeticao();
+    $("tituloForm").textContent = "Editar lançamento";
+    $("btnSalvar").textContent = "Salvar alterações";
+    $("btnReset").textContent = "Cancelar edição";
+    $("form").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function encerrarEdicao() {
+    state.editId = null;
+    $("repetir").disabled = false;
+    $("tituloForm").textContent = "Novo lançamento";
+    $("btnSalvar").textContent = "Salvar lançamento";
+    $("btnReset").textContent = "Limpar";
+  }
+  function salvarEdicao(valor, desc) {
+    var r = state.items.filter(function (x) { return x.id === state.editId; })[0];
+    if (!r) { encerrarEdicao(); return; }
+    var campos = {
+      tipo: state.tipo,
+      valor: Math.round(valor * 100) / 100,
+      descricao: desc,
+      area: $("area").value.trim(),
+      categoria: $("categoria").value.trim()
+    };
+    var aplicar = function (ids, extra) {
+      state.items.forEach(function (x) {
+        if (ids.indexOf(x.id) !== -1) Object.assign(x, campos, extra || {});
+      });
+      save();
+      encerrarEdicao();
+      $("form").reset();
+      $("data").value = todayIso();
+      setTipo("saida");
+      render();
+      toast(ids.length > 1 ? ids.length + " lançamentos atualizados." : "Alterações salvas.");
+    };
+    if (!r.serie) {
+      aplicar([r.id], { data: $("data").value || r.data, situacao: $("situacao").value });
+      return;
+    }
+    $("dlgTitulo").textContent = "“" + r.descricao + "” faz parte de uma série. Aplicar a alteração em quais?";
+    $("dlg").hidden = false;
+    $("dlgSo").onclick = function () {
+      $("dlg").hidden = true;
+      aplicar([r.id], { data: $("data").value || r.data, situacao: $("situacao").value });
+    };
+    $("dlgProx").onclick = function () {
+      $("dlg").hidden = true;
+      aplicar(state.items.filter(function (x) { return x.serie === r.serie && x.data >= r.data; }).map(function (x) { return x.id; }));
+    };
+    $("dlgNao").onclick = function () { $("dlg").hidden = true; };
+  }
+
   function apagar(ids) {
     state.items = state.items.filter(function (r) { return ids.indexOf(r.id) === -1; });
     save();
@@ -530,6 +598,7 @@ input[type="file"]{font-size:14px;padding:8px}
     if (!(valor > 0)) { toast("Informe um valor maior que zero."); $("valor").focus(); return; }
     var desc = $("descricao").value.trim();
     if (!desc) { toast("Informe a descrição."); return; }
+    if (state.editId) { salvarEdicao(valor, desc); return; }
     var anexos = Array.prototype.slice.call($("anexoForm").files || []);
     var base = {
       id: String(Date.now()) + Math.random().toString(36).slice(2, 7),
@@ -572,7 +641,10 @@ input[type="file"]{font-size:14px;padding:8px}
   });
 
   $("btnReset").addEventListener("click", function () {
-    setTimeout(function () { $("data").value = todayIso(); setTipo("saida"); $("labCustom").hidden = true; $("labVezes").hidden = true; }, 0);
+    setTimeout(function () {
+      if (state.editId) encerrarEdicao();
+      $("data").value = todayIso(); setTipo("saida"); $("labCustom").hidden = true; $("labVezes").hidden = true;
+    }, 0);
   });
 
   $("fileAnexo").addEventListener("change", function (e) {
@@ -612,6 +684,7 @@ input[type="file"]{font-size:14px;padding:8px}
       });
       save(); render(); return;
     }
+    if (t.getAttribute("data-editar")) { iniciarEdicao(t.getAttribute("data-editar")); return; }
     if (t.getAttribute("data-del")) { excluirLancamento(t.getAttribute("data-del")); return; }
   });
 
