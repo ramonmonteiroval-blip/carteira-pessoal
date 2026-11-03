@@ -286,6 +286,22 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     <button id="dlgNao">Cancelar</button>
   </div>
 </div>
+<div class="dlg" id="dlgExtrato" hidden>
+  <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="dlgExtratoTitulo">
+    <p id="dlgExtratoTitulo">Extrato de qual período?</p>
+    <button class="sec pe" data-pe="tela">Como está na tela</button>
+    <button class="sec pe" data-pe="mes">Mês em curso</button>
+    <button class="sec pe" data-pe="ano">Ano em curso (janeiro a dezembro)</button>
+    <button class="sec pe" data-pe="tudo">Todos os lançamentos</button>
+    <button class="sec pe" data-pe="datas">Escolher datas</button>
+    <div id="peDatas" hidden style="display:grid;gap:8px">
+      <label>De <input id="peDe" type="date"></label>
+      <label>Até <input id="peAte" type="date"></label>
+      <button id="peGerar" class="primary">Gerar com essas datas</button>
+    </div>
+    <button id="peCancelar">Cancelar</button>
+  </div>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -517,9 +533,8 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
   }
   function anoAtual() { return todayIso().slice(0, 4); }
   function mesHoje() { return todayIso().slice(0, 7); }
-  // Recorrências que caem em ano futuro ficam guardadas, mas só aparecem quando o ano começa.
-  function visivel(r) { return !(r.serie && r.data && r.data.slice(0, 4) > anoAtual()); }
-  function visiveis() { return state.items.filter(visivel); }
+  // Todas as parcelas ficam visíveis em qualquer período, inclusive as de anos futuros.
+  function visiveis() { return state.items; }
   function noEscopo(r) {
     var d = r.data || "";
     if (state.escopo === "mes") return d.slice(0, 7) === mesHoje();
@@ -562,22 +577,17 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
       return x.serie === serieId && (state.filtro === "Todas" || x.area === state.filtro);
     }).sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
     if (!parcelas.length) return "";
-    // Totais do pedido contam todas as parcelas, inclusive as de anos futuros ainda ocultas.
-    var todas = state.items.filter(function (x) {
-      return x.serie === serieId && (state.filtro === "Todas" || x.area === state.filtro);
-    }).sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
     var base = parcelas[0];
     var entrada = base.tipo === "entrada";
-    var total = sumOf(todas);
-    var feitas = todas.filter(function (x) { return x.situacao === "realizado"; });
-    var emAberto = sumOf(todas.filter(function (x) { return x.situacao !== "realizado"; }));
-    var ocultas = todas.length - parcelas.length;
+    var total = sumOf(parcelas);
+    var feitas = parcelas.filter(function (x) { return x.situacao === "realizado"; });
+    var emAberto = sumOf(parcelas.filter(function (x) { return x.situacao !== "realizado"; }));
     var doMes = parcelas.filter(function (x) { return x.data.slice(0, 7) === state.mes; });
     var neste = (!state.todosMeses && !state.periodo && doMes.length)
       ? " · neste mês: " + brl(sumOf(doMes)) + (doMes[0].situacao === "realizado" ? " (feito)" : " (previsto)") : "";
     return '<details class="pasta"><summary>' +
       '<div><div class="d">' + esc(base.descricao) + "</div>" +
-      '<div class="m">' + esc(base.area || "") + " · " + todas.length + " parcelas · " + feitas.length + " de " + todas.length + (entrada ? " recebidas" : " pagas") + (ocultas > 0 ? " · " + ocultas + " em anos futuros" : "") + esc(neste) + "</div>" +
+      '<div class="m">' + esc(base.area || "") + " · " + parcelas.length + " parcelas · " + feitas.length + " de " + parcelas.length + (entrada ? " recebidas" : " pagas") + esc(neste) + "</div>" +
       '<div class="m">Em aberto: ' + esc(brl(emAberto)) + "</div>" +
       '<div class="act"><button class="danger" data-pedido-del="' + esc(serieId) + '" title="Apagar todas as parcelas deste pedido">Excluir pedido inteiro</button></div></div>' +
       '<div class="val ' + (entrada ? "pos" : "neg") + '">' + (entrada ? "+" : "−") + esc(brl(total)) +
@@ -1033,9 +1043,9 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     s = String(s);
     return s.length >= n ? s : new Array(n - s.length + 1).join(" ") + s;
   }
-  function gerarExtratoPdf() {
+  function gerarExtratoPdf(de, ate, rot) {
     var today = todayIso();
-    var itens = visiveis().filter(function (r) { return noPeriodo(r) && (state.filtro === "Todas" || r.area === state.filtro); })
+    var itens = state.items.filter(function (r) { return r.data >= de && r.data <= ate && (state.filtro === "Todas" || r.area === state.filtro); })
       .sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); });
     var soma = function (arr) { return arr.reduce(function (a, r) { return a + Number(r.valor || 0); }, 0); };
     var ent = itens.filter(function (r) { return r.tipo === "entrada"; });
@@ -1050,7 +1060,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 
     var cab = [
       { t: "CARTEIRA PESSOAL - EXTRATO", b: true },
-      { t: "Periodo: " + rotuloPeriodo() + "    Area: " + state.filtro + "    Emitido em: " + emitido },
+      { t: "Periodo: " + rot + "    Area: " + state.filtro + "    Emitido em: " + emitido },
       { t: "" },
       { t: "Saldo atual: " + brl(saldo) + "    Saldo previsto: " + brl(previsto) },
       { t: "A pagar: " + brl(aPagar) + "    A receber: " + brl(aReceber) + "    Atrasados: " + late },
@@ -1107,8 +1117,10 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     render();
   });
 
-  $("btnPdf").addEventListener("click", function () {
-    var file = new File([gerarExtratoPdf()], "extrato-carteira-" + todayIso() + ".pdf", { type: "application/pdf" });
+  /* ---------- extrato: pergunta o período antes de gerar ---------- */
+  function emitirExtrato(de, ate, rot) {
+    $("dlgExtrato").hidden = true;
+    var file = new File([gerarExtratoPdf(de, ate, rot)], "extrato-carteira-" + todayIso() + ".pdf", { type: "application/pdf" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       navigator.share({ files: [file], title: "Extrato - Carteira Pessoal" })
         .then(function () { toast("Extrato enviado."); })
@@ -1116,7 +1128,42 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
       return;
     }
     baixarArquivo(file, "Extrato baixado.");
+  }
+  function escolherPeriodoExtrato(tipo) {
+    var de, ate, rot, ym = null;
+    if (tipo === "tela") {
+      if (state.periodo) { de = state.periodo.de; ate = state.periodo.ate; rot = "De " + fmtDate(de) + " a " + fmtDate(ate); }
+      else if (state.todosMeses) { de = "0000-01-01"; ate = "9999-12-31"; rot = "Todos os lançamentos"; }
+      else ym = state.mes;
+    } else if (tipo === "mes") ym = mesHoje();
+    else if (tipo === "ano") { de = anoAtual() + "-01-01"; ate = anoAtual() + "-12-31"; rot = "Ano de " + anoAtual(); }
+    else { de = "0000-01-01"; ate = "9999-12-31"; rot = "Todos os lançamentos"; }
+    if (ym) {
+      var p = ym.split("-").map(Number);
+      de = ym + "-01";
+      ate = ym + "-" + p2(new Date(p[0], p[1], 0).getDate());
+      rot = rotuloMes(ym);
+    }
+    emitirExtrato(de, ate, rot);
+  }
+  $("btnPdf").addEventListener("click", function () {
+    $("peDatas").hidden = true;
+    $("dlgExtrato").hidden = false;
   });
+  document.querySelectorAll("[data-pe]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var t = b.getAttribute("data-pe");
+      if (t === "datas") { $("peDatas").hidden = false; return; }
+      escolherPeriodoExtrato(t);
+    });
+  });
+  $("peGerar").addEventListener("click", function () {
+    var de = $("peDe").value, ate = $("peAte").value;
+    if (!de || !ate) { toast("Informe as duas datas."); return; }
+    if (de > ate) { toast("A data inicial é depois da final."); return; }
+    emitirExtrato(de, ate, "De " + fmtDate(de) + " a " + fmtDate(ate));
+  });
+  $("peCancelar").addEventListener("click", function () { $("dlgExtrato").hidden = true; });
   $("alerta").addEventListener("click", function () {
     $("pend").scrollIntoView({ behavior: "smooth", block: "start" });
   });
