@@ -562,17 +562,22 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
       return x.serie === serieId && (state.filtro === "Todas" || x.area === state.filtro);
     }).sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
     if (!parcelas.length) return "";
+    // Totais do pedido contam todas as parcelas, inclusive as de anos futuros ainda ocultas.
+    var todas = state.items.filter(function (x) {
+      return x.serie === serieId && (state.filtro === "Todas" || x.area === state.filtro);
+    }).sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
     var base = parcelas[0];
     var entrada = base.tipo === "entrada";
-    var total = sumOf(parcelas);
-    var feitas = parcelas.filter(function (x) { return x.situacao === "realizado"; });
-    var emAberto = sumOf(parcelas.filter(function (x) { return x.situacao !== "realizado"; }));
+    var total = sumOf(todas);
+    var feitas = todas.filter(function (x) { return x.situacao === "realizado"; });
+    var emAberto = sumOf(todas.filter(function (x) { return x.situacao !== "realizado"; }));
+    var ocultas = todas.length - parcelas.length;
     var doMes = parcelas.filter(function (x) { return x.data.slice(0, 7) === state.mes; });
     var neste = (!state.todosMeses && !state.periodo && doMes.length)
       ? " · neste mês: " + brl(sumOf(doMes)) + (doMes[0].situacao === "realizado" ? " (feito)" : " (previsto)") : "";
     return '<details class="pasta"><summary>' +
       '<div><div class="d">' + esc(base.descricao) + "</div>" +
-      '<div class="m">' + esc(base.area || "") + " · " + parcelas.length + " parcelas · " + feitas.length + " de " + parcelas.length + (entrada ? " recebidas" : " pagas") + esc(neste) + "</div>" +
+      '<div class="m">' + esc(base.area || "") + " · " + todas.length + " parcelas · " + feitas.length + " de " + todas.length + (entrada ? " recebidas" : " pagas") + (ocultas > 0 ? " · " + ocultas + " em anos futuros" : "") + esc(neste) + "</div>" +
       '<div class="m">Em aberto: ' + esc(brl(emAberto)) + "</div>" +
       '<div class="act"><button class="danger" data-pedido-del="' + esc(serieId) + '" title="Apagar todas as parcelas deste pedido">Excluir pedido inteiro</button></div></div>' +
       '<div class="val ' + (entrada ? "pos" : "neg") + '">' + (entrada ? "+" : "−") + esc(brl(total)) +
