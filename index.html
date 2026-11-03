@@ -75,6 +75,10 @@ input[type="file"]{font-size:14px;padding:8px}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .row{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
 .row:last-child{border-bottom:0}
+.row.sel{grid-template-columns:auto 1fr auto}
+.row input[type="checkbox"]{width:22px;height:22px;min-height:0;margin:0;padding:0;accent-color:var(--accent);cursor:pointer}
+.selbar{display:flex;justify-content:flex-end;margin-bottom:6px}
+.barsel{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:5;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;margin-bottom:8px;box-shadow:0 4px 14px rgba(0,0,0,.18)}
 .row .d{font-weight:600;overflow-wrap:anywhere}
 .row .m{font-size:12px;color:var(--muted)}
 .row .val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;text-align:right;white-space:nowrap}
@@ -229,6 +233,15 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     </div>
     <div class="cards" id="cardsMes"></div>
     <div class="filters" id="filters"></div>
+    <div class="selbar"><button id="btnSelModo" class="ghost">Selecionar</button></div>
+    <div class="barsel" id="barSel" hidden>
+      <span id="selQtd">0 selecionados</span>
+      <div class="btns">
+        <button id="selTodos" class="ghost">Selecionar todos</button>
+        <button id="selLimpar" class="ghost">Desmarcar</button>
+        <button id="selExcluir" class="danger" disabled>Excluir selecionados</button>
+      </div>
+    </div>
     <div id="list"></div>
   </section>
 
@@ -278,7 +291,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 <script>
 (function () {
   var KEY = "carteira-pessoal-v1";
-  var state = { tipo: "saida", filtro: "Todas", items: [], anexarId: null, mes: todayIso().slice(0, 7), todosMeses: false, periodo: null, escopo: "mes" };
+  var state = { tipo: "saida", filtro: "Todas", items: [], anexarId: null, mes: todayIso().slice(0, 7), todosMeses: false, periodo: null, escopo: "mes", selModo: false, sel: {} };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -482,6 +495,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     }
 
     refreshAnexos();
+    atualizaBarra();
   }
 
   /* ---------- pastas de série e controle mensal ---------- */
@@ -559,7 +573,8 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     return '<details class="pasta"><summary>' +
       '<div><div class="d">' + esc(base.descricao) + "</div>" +
       '<div class="m">' + esc(base.area || "") + " · " + parcelas.length + " parcelas · " + feitas.length + " de " + parcelas.length + (entrada ? " recebidas" : " pagas") + esc(neste) + "</div>" +
-      '<div class="m">Em aberto: ' + esc(brl(emAberto)) + "</div></div>" +
+      '<div class="m">Em aberto: ' + esc(brl(emAberto)) + "</div>" +
+      '<div class="act"><button class="danger" data-pedido-del="' + esc(serieId) + '" title="Apagar todas as parcelas deste pedido">Excluir pedido inteiro</button></div></div>' +
       '<div class="val ' + (entrada ? "pos" : "neg") + '">' + (entrada ? "+" : "−") + esc(brl(total)) +
       '<div class="m" style="text-align:right">pedido total</div></div>' +
       "</summary>" +
@@ -591,7 +606,8 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
   function rowHtml(r, tag) {
     var sign = r.tipo === "entrada" ? "+" : "−";
     var cls = r.tipo === "entrada" ? "pos" : "neg";
-    return '<div class="row">' +
+    var chk = state.selModo ? '<input type="checkbox" data-sel="' + esc(r.id) + '"' + (state.sel[r.id] ? " checked" : "") + ' aria-label="Selecionar este lançamento">' : "";
+    return '<div class="row' + (state.selModo ? " sel" : "") + '">' + chk +
       '<div><div class="d">' + esc(r.descricao) + "</div>" +
       '<div class="m">' + esc(fmtDate(r.data)) + " · " + esc(r.area || "") + (r.categoria ? " · " + esc(r.categoria) : "") + " " + tag + "</div>" +
       '<div class="anx" data-anx="' + esc(r.id) + '"></div>' +
@@ -749,6 +765,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 
   function apagar(ids) {
     state.items = state.items.filter(function (r) { return ids.indexOf(r.id) === -1; });
+    ids.forEach(function (id) { delete state.sel[id]; });
     save();
     ids.forEach(function (id) { anexoRemoveAll(id).catch(function () {}); });
     render();
@@ -769,6 +786,33 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
       apagar(state.items.filter(function (x) { return x.serie === r.serie && x.data >= r.data; }).map(function (x) { return x.id; }));
     };
     $("dlgNao").onclick = function () { $("dlg").hidden = true; };
+  }
+
+  /* ---------- seleção em lote e exclusão de pedido inteiro ---------- */
+  function selIds() { return Object.keys(state.sel).filter(function (k) { return state.sel[k]; }); }
+  function atualizaBarra() {
+    var n = selIds().length;
+    $("barSel").hidden = !state.selModo;
+    $("btnSelModo").textContent = state.selModo ? "Cancelar seleção" : "Selecionar";
+    $("selQtd").textContent = n + (n === 1 ? " selecionado" : " selecionados");
+    $("selExcluir").disabled = n === 0;
+  }
+  function excluirSelecionados() {
+    var ids = selIds();
+    if (!ids.length) return;
+    var txt = ids.length === 1 ? "1 lançamento" : ids.length + " lançamentos";
+    if (!window.confirm("Excluir " + txt + " selecionado(s)? Os anexos também somem. Não tem volta.")) return;
+    state.selModo = false; state.sel = {};
+    apagar(ids);
+  }
+  function excluirPedido(serieId) {
+    var parc = state.items.filter(function (x) { return x.serie === serieId; });
+    if (!parc.length) return;
+    var ids = parc.map(function (x) { return x.id; });
+    var msg = "Excluir o pedido inteiro “" + parc[0].descricao + "”? Serão apagadas as " + parc.length +
+      " parcela(s) (" + brl(sumOf(parc)) + "), inclusive as de anos futuros, e os anexos. Não tem volta.";
+    if (!window.confirm(msg)) return;
+    apagar(ids);
   }
 
   /* valor em moeda: o que você digita vira centavos automaticamente (12345 -> 123,45) */
@@ -878,8 +922,31 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
       save(); render(); return;
     }
     if (t.getAttribute("data-editar")) { iniciarEdicao(t.getAttribute("data-editar")); return; }
+    if (t.getAttribute("data-pedido-del")) { e.preventDefault(); excluirPedido(t.getAttribute("data-pedido-del")); return; }
+    if (t.getAttribute("data-sel")) {
+      var sid = t.getAttribute("data-sel");
+      if (t.checked) state.sel[sid] = true; else delete state.sel[sid];
+      document.querySelectorAll('input[data-sel="' + sid + '"]').forEach(function (cb) { cb.checked = t.checked; });
+      atualizaBarra(); return;
+    }
     if (t.getAttribute("data-del")) { excluirLancamento(t.getAttribute("data-del")); return; }
   });
+
+  $("btnSelModo").addEventListener("click", function () {
+    state.selModo = !state.selModo;
+    if (!state.selModo) state.sel = {};
+    render();
+  });
+  $("selTodos").addEventListener("click", function () {
+    document.querySelectorAll("input[data-sel]").forEach(function (cb) { cb.checked = true; state.sel[cb.getAttribute("data-sel")] = true; });
+    atualizaBarra();
+  });
+  $("selLimpar").addEventListener("click", function () {
+    state.sel = {};
+    document.querySelectorAll("input[data-sel]").forEach(function (cb) { cb.checked = false; });
+    atualizaBarra();
+  });
+  $("selExcluir").addEventListener("click", excluirSelecionados);
 
   /* ---------- cópia de segurança e restauração ---------- */
   function baixarArquivo(file, msg) {
