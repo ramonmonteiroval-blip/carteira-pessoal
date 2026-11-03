@@ -15,7 +15,7 @@
 <style>
 :root{
   --bg:#F2F5F7;--panel:#FFFFFF;--ink:#0B1F33;--muted:#5A6B7D;--line:#D9E1E8;
-  --gain:#0B7A46;--loss:#B53436;--warn:#9A6A00;--accent:#0B3C5D;--accent-ink:#FFFFFF;
+  --gain:#0B7A46;--loss:#B53436;--warn:#9A6A00;--accent:#0B3C5D;--accent-ink:#FFFFFF;--azul:#1F6FB5;
   --mono:ui-monospace,Menlo,Consolas,"Courier New",monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   color-scheme:light;
@@ -23,20 +23,21 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#09141E;--panel:#10202E;--ink:#E4EDF5;--muted:#8DA2B5;--line:#22384C;
-    --gain:#3DD68C;--loss:#F0686A;--warn:#E8B54A;--accent:#1B5A86;--accent-ink:#E4EDF5;
+    --gain:#3DD68C;--loss:#F0686A;--warn:#E8B54A;--accent:#1B5A86;--accent-ink:#E4EDF5;--azul:#6CB4F0;
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#09141E;--panel:#10202E;--ink:#E4EDF5;--muted:#8DA2B5;--line:#22384C;
-  --gain:#3DD68C;--loss:#F0686A;--warn:#E8B54A;--accent:#1B5A86;--accent-ink:#E4EDF5;
+  --gain:#3DD68C;--loss:#F0686A;--warn:#E8B54A;--accent:#1B5A86;--accent-ink:#E4EDF5;--azul:#6CB4F0;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-text-size-adjust:100%}
 body{padding-block:calc(16px + env(safe-area-inset-top,0px)) calc(32px + env(safe-area-inset-bottom,0px));padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));line-height:1.4}
-.wrap{max-width:900px;margin:0 auto;display:grid;gap:14px;min-width:0}
+.wrap{max-width:900px;margin:0 auto;display:grid;gap:8px;min-width:0}
+.azul{color:var(--azul)}
 header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px}
 .brand svg{width:34px;height:34px}
@@ -47,23 +48,25 @@ button.primary{background:var(--accent);border-color:var(--accent);color:var(--a
 button.ghost{border-color:transparent;background:transparent;color:var(--muted);min-height:auto;padding:4px 6px}
 button.danger{border-color:var(--loss);background:transparent;color:var(--loss);font-weight:600;min-height:36px;padding:6px 12px}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+@media (min-width:640px){.cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-width:0}
 .card .l{font-size:12px;color:var(--muted)}
-.card .v{font-family:var(--mono);font-size:19px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.card .v{font-family:var(--mono);font-size:16px;font-weight:700;margin-top:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .pos{color:var(--gain)}.neg{color:var(--loss)}.warn{color:var(--warn)}
 .tab-ano{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
-.tab-ano th,.tab-ano td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.tab-ano td.pos,.tab-ano td.neg{font-weight:700}
+.tab-ano th,.tab-ano td{padding:5px 3px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 .tab-ano th:first-child,.tab-ano td:first-child{text-align:left}
 .tab-ano th{font-size:12px;color:var(--muted);font-weight:600}
 .tab-ano tr[data-mes]{cursor:pointer}
 .tab-ano tr.atual td{font-weight:700;background:var(--bg)}
 .tab-ano tfoot td{font-weight:700;border-top:2px solid var(--line)}
-section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px;font-weight:600}
-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-label{display:grid;gap:4px;font-size:12px;color:var(--muted);min-width:0}
-input,select{font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px}
+label{display:grid;gap:2px;font-size:12px;color:var(--muted);min-width:0}
+input,select{font:inherit;font-size:15px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
 input[type="file"]{font-size:14px;padding:8px}
 .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg button{flex:1;border:0;border-radius:0;min-height:40px}
@@ -73,7 +76,7 @@ input[type="file"]{font-size:14px;padding:8px}
 .filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .chip{border-radius:999px;padding:4px 12px;font-size:13px;min-height:auto}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.row{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:6px 0;border-bottom:1px solid var(--line);align-items:center}
 .row:last-child{border-bottom:0}
 .row.sel{grid-template-columns:auto 1fr auto}
 .row input[type="checkbox"]{width:22px;height:22px;min-height:0;margin:0;padding:0;accent-color:var(--accent);cursor:pointer}
@@ -81,11 +84,12 @@ input[type="file"]{font-size:14px;padding:8px}
 .barsel{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:5;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;margin-bottom:8px;box-shadow:0 4px 14px rgba(0,0,0,.18)}
 .row .d{font-weight:600;overflow-wrap:anywhere}
 .row .m{font-size:12px;color:var(--muted)}
-.row .val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;text-align:right;white-space:nowrap}
+.row .val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;text-align:right;white-space:nowrap}
 .tag{display:inline-block;font-size:11px;padding:1px 6px;border:1px solid var(--line);border-radius:3px;color:var(--muted);margin-left:6px}
 .tag.ok{color:var(--gain);border-color:var(--gain)}
 .tag.late{color:var(--loss);border-color:var(--loss)}
-.act{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;margin-top:2px}
+.act{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;margin-top:0}
+.act button{font-size:13px;min-height:32px;padding:4px 8px}
 .anx{display:flex;flex-wrap:wrap;gap:2px 8px;min-width:0}
 .anx:empty{display:none}
 .anx-item{display:inline-flex;align-items:center;max-width:100%;min-width:0}
@@ -105,7 +109,7 @@ input[type="file"]{font-size:14px;padding:8px}
 .mes-nav strong{flex:1;text-align:center;min-width:140px}
 .periodo{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px}
 .periodo label{flex:1;min-width:140px}
-.pasta{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;min-width:0}
+.pasta{border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin-bottom:6px;min-width:0}
 .pasta summary{cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center}
 .pasta summary .d{font-weight:600;overflow-wrap:anywhere}
 .pasta summary .m{font-size:12px;color:var(--muted)}
@@ -450,7 +454,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 
     $("cards").innerHTML =
       card("Saldo realizado", brl(saldo), saldo >= 0 ? "pos" : "neg") +
-      card("Saldo previsto", brl(previsto), previsto >= 0 ? "pos" : "neg") +
+      card("Saldo previsto", brl(previsto), previsto >= 0 ? "azul" : "neg") +
       card("A pagar", brl(aPagar), "neg") +
       card("A receber", brl(aReceber), "pos") +
       card("Atrasados", String(late), late ? "warn" : "");
@@ -490,7 +494,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     $("mesTodos").textContent = state.periodo ? "Voltar ao mês" : (state.todosMeses ? "Ver por mês" : "Ver todos");
     $("cardsMes").innerHTML =
       card("Saldo do mês", brl(saldoM), saldoM >= 0 ? "pos" : "neg") +
-      card("Previsto do mês", brl(prevM), prevM >= 0 ? "pos" : "neg") +
+      card("Previsto do mês", brl(prevM), prevM >= 0 ? "azul" : "neg") +
       card("A receber no mês", brl(aRecM), "pos") +
       card("A pagar no mês", brl(aPagM), "neg");
 
