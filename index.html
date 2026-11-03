@@ -52,6 +52,13 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .card .l{font-size:12px;color:var(--muted)}
 .card .v{font-family:var(--mono);font-size:19px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .pos{color:var(--gain)}.neg{color:var(--loss)}.warn{color:var(--warn)}
+.tab-ano{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
+.tab-ano th,.tab-ano td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.tab-ano th:first-child,.tab-ano td:first-child{text-align:left}
+.tab-ano th{font-size:12px;color:var(--muted);font-weight:600}
+.tab-ano tr[data-mes]{cursor:pointer}
+.tab-ano tr.atual td{font-weight:700;background:var(--bg)}
+.tab-ano tfoot td{font-weight:700;border-top:2px solid var(--line)}
 section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px;font-weight:600}
 form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
@@ -130,7 +137,16 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
   </header>
 
   <div class="alerta" id="alerta" role="alert" hidden></div>
-  <div class="cards" id="cards"></div>
+  <section class="escopo">
+    <div class="chips" id="escopoSeg">
+      <button type="button" data-escopo="mes" aria-pressed="true">Mês em curso</button>
+      <button type="button" data-escopo="ano" aria-pressed="false">Ano em curso</button>
+      <button type="button" data-escopo="geral" aria-pressed="false">Geral</button>
+    </div>
+    <h2 id="tituloEscopo" style="margin-top:12px"></h2>
+    <div class="cards" id="cards"></div>
+    <div id="anoTab" hidden></div>
+  </section>
 
   <section>
     <h2 id="tituloForm">Novo lançamento</h2>
@@ -262,7 +278,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 <script>
 (function () {
   var KEY = "carteira-pessoal-v1";
-  var state = { tipo: "saida", filtro: "Todas", items: [], anexarId: null, mes: todayIso().slice(0, 7), todosMeses: false, periodo: null };
+  var state = { tipo: "saida", filtro: "Todas", items: [], anexarId: null, mes: todayIso().slice(0, 7), todosMeses: false, periodo: null, escopo: "mes" };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -390,24 +406,31 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
 
   function render() {
     var today = todayIso();
-    var items = state.items;
+    var items = visiveis();
     var sum = function (arr) { return arr.reduce(function (a, r) { return a + Number(r.valor || 0); }, 0); };
-    var ent = items.filter(function (r) { return r.tipo === "entrada"; });
-    var sai = items.filter(function (r) { return r.tipo === "saida"; });
+    var doEsc = items.filter(noEscopo);
+    var ent = doEsc.filter(function (r) { return r.tipo === "entrada"; });
+    var sai = doEsc.filter(function (r) { return r.tipo === "saida"; });
     var recebido = sum(ent.filter(function (r) { return r.situacao === "realizado"; }));
     var pago = sum(sai.filter(function (r) { return r.situacao === "realizado"; }));
     var aReceber = sum(ent.filter(function (r) { return r.situacao !== "realizado"; }));
     var aPagar = sum(sai.filter(function (r) { return r.situacao !== "realizado"; }));
     var saldo = recebido - pago;
     var previsto = saldo + aReceber - aPagar;
-    var late = items.filter(function (r) { return r.situacao !== "realizado" && r.data && r.data < today; }).length;
+    var late = doEsc.filter(function (r) { return r.situacao !== "realizado" && r.data && r.data < today; }).length;
 
     $("cards").innerHTML =
-      card("Saldo atual", brl(saldo), saldo >= 0 ? "pos" : "neg") +
+      card("Saldo realizado", brl(saldo), saldo >= 0 ? "pos" : "neg") +
       card("Saldo previsto", brl(previsto), previsto >= 0 ? "pos" : "neg") +
       card("A pagar", brl(aPagar), "neg") +
       card("A receber", brl(aReceber), "pos") +
       card("Atrasados", String(late), late ? "warn" : "");
+    $("tituloEscopo").textContent = tituloEscopo();
+    Array.prototype.forEach.call(document.querySelectorAll("[data-escopo]"), function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-escopo") === state.escopo));
+    });
+    $("anoTab").hidden = state.escopo !== "ano";
+    if (state.escopo === "ano") $("anoTab").innerHTML = tabelaAno(items);
 
     var areas = {};
     items.forEach(function (r) { if (r.area) areas[r.area] = true; });
@@ -417,7 +440,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
       return '<button class="chip" data-f="' + esc(n) + '" aria-pressed="' + (n === state.filtro) + '">' + esc(n) + "</button>";
     }).join("");
 
-    var pend = items.filter(function (r) { return r.situacao !== "realizado"; })
+    var pend = doEsc.filter(function (r) { return r.situacao !== "realizado"; })
       .sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
     $("pend").innerHTML = pend.length ? renderLista(pend, today, false) : '<div class="empty"><strong>Nenhuma pendência.</strong>Tudo confirmado.</div>';
 
@@ -478,12 +501,50 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     if (state.todosMeses) return true;
     return r.data.slice(0, 7) === state.mes;
   }
+  function anoAtual() { return todayIso().slice(0, 4); }
+  function mesHoje() { return todayIso().slice(0, 7); }
+  // Recorrências que caem em ano futuro ficam guardadas, mas só aparecem quando o ano começa.
+  function visivel(r) { return !(r.serie && r.data && r.data.slice(0, 4) > anoAtual()); }
+  function visiveis() { return state.items.filter(visivel); }
+  function noEscopo(r) {
+    var d = r.data || "";
+    if (state.escopo === "mes") return d.slice(0, 7) === mesHoje();
+    if (state.escopo === "ano") return d.slice(0, 4) === anoAtual();
+    return true;
+  }
+  function tituloEscopo() {
+    if (state.escopo === "mes") return "Mês em curso: " + rotuloMes(mesHoje());
+    if (state.escopo === "ano") return "Ano em curso: " + anoAtual() + " (janeiro a dezembro)";
+    return "Geral: todos os lançamentos visíveis";
+  }
+  function tabelaAno(items) {
+    var ano = anoAtual(), hoje = mesHoje(), linhas = "", tr = 0, tdv = 0, tres = 0;
+    for (var m = 1; m <= 12; m++) {
+      var ym = ano + "-" + p2(m);
+      var ls = items.filter(function (r) { return (r.data || "").slice(0, 7) === ym; });
+      var rec = sumOf(ls.filter(function (r) { return r.tipo === "entrada"; }));
+      var des = sumOf(ls.filter(function (r) { return r.tipo === "saida"; }));
+      var res = rec - des;
+      tr += rec; tdv += des; tres += res;
+      linhas += '<tr data-mes="' + ym + '"' + (ym === hoje ? ' class="atual"' : "") + ">" +
+        "<td>" + MESES[m - 1] + "</td>" +
+        '<td class="pos">' + esc(brl(rec)) + "</td>" +
+        '<td class="neg">' + esc(brl(des)) + "</td>" +
+        '<td class="' + (res >= 0 ? "pos" : "neg") + '">' + esc(brl(res)) + "</td></tr>";
+    }
+    return '<table class="tab-ano"><thead><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Resultado</th></tr></thead>' +
+      "<tbody>" + linhas + "</tbody><tfoot><tr><td>Total do ano</td>" +
+      '<td class="pos">' + esc(brl(tr)) + "</td>" +
+      '<td class="neg">' + esc(brl(tdv)) + "</td>" +
+      '<td class="' + (tres >= 0 ? "pos" : "neg") + '">' + esc(brl(tres)) + "</td></tr></tfoot></table>" +
+      '<p class="hint">Toque em um mês para ver os lançamentos dele na lista abaixo.</p>';
+  }
   function rotuloPeriodo() {
     if (state.periodo) return "De " + fmtDate(state.periodo.de) + " a " + fmtDate(state.periodo.ate);
     return state.todosMeses ? "Todos os meses" : rotuloMes(state.mes);
   }
   function pastaHtml(serieId, today, soMes) {
-    var parcelas = state.items.filter(function (x) {
+    var parcelas = visiveis().filter(function (x) {
       return x.serie === serieId && (state.filtro === "Todas" || x.area === state.filtro);
     }).sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
     if (!parcelas.length) return "";
@@ -902,7 +963,7 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
   }
   function gerarExtratoPdf() {
     var today = todayIso();
-    var itens = state.items.filter(function (r) { return noPeriodo(r) && (state.filtro === "Todas" || r.area === state.filtro); })
+    var itens = visiveis().filter(function (r) { return noPeriodo(r) && (state.filtro === "Todas" || r.area === state.filtro); })
       .sort(function (a, b) { return String(b.data).localeCompare(String(a.data)); });
     var soma = function (arr) { return arr.reduce(function (a, r) { return a + Number(r.valor || 0); }, 0); };
     var ent = itens.filter(function (r) { return r.tipo === "entrada"; });
@@ -938,6 +999,25 @@ details.sec summary{cursor:pointer;font-weight:600;font-size:14px;list-style-pos
     for (var i = 0; i < todas.length; i += 50) paginas.push(todas.slice(i, i + 50));
     return pdfGerar(paginas);
   }
+  $("escopoSeg").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("[data-escopo]") : null;
+    if (!b) return;
+    state.escopo = b.getAttribute("data-escopo");
+    // O escopo também define a lista: mês/ano começam no mês atual; geral mostra tudo.
+    state.periodo = null;
+    state.mes = mesHoje();
+    state.todosMeses = state.escopo === "geral";
+    render();
+  });
+  $("anoTab").addEventListener("click", function (e) {
+    var tr = e.target.closest ? e.target.closest("[data-mes]") : null;
+    if (!tr) return;
+    state.mes = tr.getAttribute("data-mes");
+    state.todosMeses = false;
+    state.periodo = null;
+    render();
+    $("list").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   $("mesAnt").addEventListener("click", function () { mudaMes(-1); });
   $("mesProx").addEventListener("click", function () { mudaMes(1); });
   $("mesTodos").addEventListener("click", function () {
